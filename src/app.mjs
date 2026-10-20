@@ -43,6 +43,7 @@ const fmtTime = value => { if(!value) return '아직 확인 전'; const d=new Da
 const fmtDate = value => { if(!value) return '미확인'; const v=String(value); if(/^\d{8}$/.test(v))return v.slice(0,4)+'.'+v.slice(4,6)+'.'+v.slice(6); const d=new Date(value); return Number.isNaN(d.getTime())?v:new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(d); };
 const number = value => new Intl.NumberFormat('ko-KR').format(value || 0);
 const regions = ['서울','부산','대구','인천','광주','대전','울산','세종','경기','강원','충북','충남','전북','전남','경북','경남','제주'];
+const regionSummary = values => !values?.length ? '지역 원문 확인' : values.includes('전국') || regions.every(region=>values.includes(region)) ? '전국' : values.slice(0,3).join(' · ')+(values.length>3?` 외 ${values.length-3}개 지역`:'');
 const statusNames = {active:'계속사업자',suspended:'휴업자',closed:'폐업자',unknown:'미확인'};
 const titles = {lookup:'사업자 조회',partners:'거래처 관리',programs:'지원사업 찾기',profile:'내 사업',history:'변경 기록',data:'데이터 현황'};
 const navItems = [['lookup','search'],['partners','folder'],['programs','spark'],['profile','building'],['history','clock'],['data','database']];
@@ -250,7 +251,7 @@ function programCard(item) {
   const label=item.assessment==='candidate'?'관련 공고':item.assessment==='mismatch'?'조건 재확인':'추가 확인 필요';
   const tone=item.assessment==='candidate'?'positive':'neutral';
   const reasons=Array.isArray(item.reasons)?item.reasons.slice(0,2).map(x=>typeof x==='string'?x:x.message||x.label||'조건 확인'):['원문 신청조건을 확인하세요.'];
-  return `<article class="card program-card"><div class="program-top"><span class="program-source">${esc(p.agency||p.source||'지원기관 확인')}</span><span class="badge ${tone}">${label}</span></div><h3>${esc(p.title)}</h3><div class="program-meta"><span>${icon('location')}${esc((p.regions||[]).slice(0,3).join(' · ')||'지역 원문 확인')}</span><span>${icon('tag')}${esc((p.categories||[]).slice(0,2).join(' · ')||'분야 원문 확인')}</span></div><div class="program-reasons">${esc(reasons.join(' · ')||'원문에서 업력·규모·제외조건을 확인해 주세요.')}</div><div class="program-bottom"><span class="deadline">${icon('calendar')} ${p.endDate?esc(fmtDate(p.endDate))+' 마감':'마감일 원문 확인'}</span><button class="text-button" data-action="program-detail" data-id="${esc(p.id)}">조건·원문 보기 ${icon('arrow')}</button></div></article>`;
+  return `<article class="card program-card"><div class="program-top"><span class="program-source">${esc(p.agency||p.source||'지원기관 확인')}</span><span class="badge ${tone}">${label}</span></div><h3>${esc(p.title)}</h3><div class="program-meta"><span>${icon('location')}${esc(regionSummary(p.regions))}</span><span>${icon('tag')}${esc((p.categories||[]).slice(0,2).join(' · ')||'분야 원문 확인')}</span></div><div class="program-reasons">${esc(reasons.join(' · ')||'원문에서 업력·규모·제외조건을 확인해 주세요.')}</div><div class="program-bottom"><span class="deadline">${icon('calendar')} ${p.endDate?esc(fmtDate(p.endDate))+' 마감':'마감일 원문 확인'}</span><button class="text-button" data-action="program-detail" data-id="${esc(p.id)}">조건·원문 보기 ${icon('arrow')}</button></div></article>`;
 }
 function profileView() {
   const p=ui.profileDraft||workspace.profile;

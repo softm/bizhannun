@@ -7,6 +7,7 @@
 - API 운영 origin: [bizhannun.vercel.app](https://bizhannun.vercel.app/api/health)
 - 저장소: [softm/bizhannun](https://github.com/softm/bizhannun)
 - 운영·배포·장애 대응: [docs/OPERATIONS.md](docs/OPERATIONS.md)
+- 구현·배포 검증과 화면 기록: [docs/VERIFICATION.md](docs/VERIFICATION.md)
 - 초기 제품 기획: [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md). 구현 완료 목록이 아닌 확장 방향을 담은 기획 문서입니다.
 
 ## 구현 범위
