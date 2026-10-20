@@ -1,6 +1,7 @@
 import { copyFile, lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 import { validateApiBase } from '../src/api-client.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
@@ -73,6 +74,22 @@ for (const filename of files) {
 if (apiBase !== undefined) {
   const configuration = await readFile(join(DIST, 'app-config.js'), 'utf8');
   await writeFile(join(DIST, 'app-config.js'), `${configuration.trimEnd()}\nwindow.BIZHANNUN_CONFIG = Object.freeze({ ...window.BIZHANNUN_CONFIG, apiBase: ${JSON.stringify(apiBase)} });\n`);
+}
+// Give HTML, settings and every browser module the same content-based version.
+// This prevents an older cached import from mixing with a newly deployed page.
+const browserFiles = files.filter((name) => name === 'app-config.js' || name === 'styles.css' || (name.startsWith(`src${sep}`) && ['.mjs', '.js'].includes(extname(name)))).sort();
+const hash = createHash('sha256');
+for (const filename of browserFiles) hash.update(filename).update(await readFile(join(DIST, filename)));
+const version = hash.digest('hex').slice(0, 12);
+for (const filename of browserFiles.filter((name) => name.startsWith(`src${sep}`))) {
+  const content = await readFile(join(DIST, filename), 'utf8');
+  const versioned = content.replace(/((?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'])(\.{1,2}\/[^"']+\.(?:mjs|js))(["'])/g, `$1$2?v=${version}$3`);
+  await writeFile(join(DIST, filename), versioned);
+}
+for (const filename of ['index.html', 'data-status.html']) {
+  const content = await readFile(join(DIST, filename), 'utf8');
+  const versioned = content.replace(/((?:src|href)=["'])(\.\/(?:src\/app\.mjs|styles\.css|app-config\.js))(["'])/g, `$1$2?v=${version}$3`);
+  await writeFile(join(DIST, filename), versioned);
 }
 await writeFile(join(DIST, '.nojekyll'), '');
 console.log(`공개 파일 ${files.length + 1}개를 dist/에 빌드했습니다. 서버 코드·인증키·문서는 포함하지 않습니다.`);
