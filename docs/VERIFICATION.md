@@ -26,7 +26,7 @@ v0.1 초기 검증: 2026-10-20. v0.2 로그인·계정 보관 추가 기록: 202
 | 카카오·네이버 로그인 | OAuth 서버·상태 쿠키·제공자 확인·Custom Token 구현; Production `AUTH_SESSION_SECRET` 등록 | 앱 인증값·Firebase Admin 설정 및 실제 인증 |
 | 계정 정보 저장 | 거래처·메모·프로필·조회 이력 저장 구현; 실제 운영 프로필 커밋·재조회 확인 | 저장 직후 충돌 안내 보완 후 운영 UI 재확인 |
 | 기존 기기 자료 이전 | 명시적 가져오기, 사업자번호 중복 보호, 기기 원본 보존·자동 검사 | 기존 자료가 있는 브라우저의 실제 이전 확인 |
-| v0.2 배포 | Pages Actions `39512185369` 성공; Vercel `dpl_3u5Aqo91Zko3kciBYGnDeLPiUrCw` READY·운영 alias 확인 | 저장 검증 보완 배포 결과는 아래에 기록 |
+| v0.2 배포 | 저장 확인 수정 커밋 `81cd1c1`의 Pages Actions `39513872679` 성공; Vercel `dpl_HCF4kEu78nQGDhgxWJf8SVUgqPDN` READY·운영 alias 확인 | 수정 배포 후 실제 브라우저 인증·저장 재검증 |
 | 국세청·공정위 | 운영 `/api/health` HTTP 200, 두 제공자 모두 `configuration: missing_key`, `authentication: not_checked` | Production 키 등록·재배포 후 실제 기관 응답 확인 |
 
 Firestore Console에서 `bizhannun` 규칙 게시와 새 활성 버전을 확인했습니다. 게시 규칙의 SHA-256은 `32b7854f24bd2a9f28ff7f34fce12730bdeb619a9127a9d69b8b2239c1a8479b`입니다. 규칙 게시, 에뮬레이터 시험, 실제 계정 시험의 범위를 구분합니다.
@@ -55,6 +55,8 @@ Firestore Console에서 `bizhannun` 규칙 게시와 새 활성 버전을 확인
 실제 운영에서 커밋 후 재조회에는 성공했지만 저장 직후 확인에서 충돌로 표시되는 경합을 발견했습니다. 설치된 Firebase SDK의 `getDocFromServer`가 기존 실시간 listener의 마지막 서버 스냅샷을 이용하는 경로를 확인했습니다. 이전 head를 반환하는 조건을 강제로 재현한 시험은 수정 전 저장 후 `cloud/conflict`로 실패했고, 수정 후 통과했습니다. 운영 서버의 스트림 순서를 직접 계측한 것은 아니므로 이 재현 시험과 실제 운영 관찰을 구분합니다.
 
 변경 가능한 head를 읽기 전용 `runTransaction(transaction.get)`으로 확인하도록 수정했습니다. 실제 더 높은 revision은 계속 충돌로 처리하며, 커밋 후 최신 head를 확인하지 못하면 `cloud/confirmation-pending`으로 안내하고 커밋한 자료를 보존합니다. Rules나 저장 스키마는 변경하지 않았습니다. 저장 어댑터 **16/16**, 실제 Firebase SDK와 Enterprise 에뮬레이터 **8/8**이 통과했습니다. `check`·기본 테스트·`build`·`git diff --check`도 통과했습니다. 수정 이후 실제 운영 브라우저 재검증은 연결 상실로 완료하지 못했습니다.
+
+수정 커밋은 [`81cd1c1`](https://github.com/softm/bizhannun/commit/81cd1c12eaeaf5a046840883d64569c3f8845dcc)이며, [Pages 배포 실행](https://github.com/softm/bizhannun/actions/runs/39513872679)의 build·deploy가 모두 성공했습니다. Vercel 배포 `dpl_HCF4kEu78nQGDhgxWJf8SVUgqPDN`은 READY이며 `bizhannun.vercel.app`이 이 배포를 가리키는 것을 확인했습니다. 양쪽 공개 HTML에서 실제 모듈 URL을 따라가 새 저장 확인 로직과 프로필 보관 안내 문구를 확인했습니다. 운영 `/api/config`와 `/api/health`도 HTTP 200·Pages CORS 허용을 다시 확인했습니다. 국세청·공정위 키와 카카오·네이버 서버 인증값은 여전히 설정 대기였습니다.
 
 ## v0.2 자동 검사 범위
 
