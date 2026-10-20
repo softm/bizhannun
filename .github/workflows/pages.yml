@@ -79,7 +79,7 @@ jobs:
       - name: Build public website
         env:
           # This repository variable is a public origin, never an API key.
-          BIZ_API_BASE: ${{ vars.BIZ_API_BASE }}
+          BIZ_API_BASE: ${{ vars.BIZ_API_BASE || 'https://bizhannun.vercel.app' }}
         run: npm run build
 
       - name: Upload Pages artifact

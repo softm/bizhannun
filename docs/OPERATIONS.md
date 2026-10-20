@@ -49,7 +49,7 @@ npm run build
 
 1. 저장소 Pages 설정에서 Source를 **GitHub Actions**로 지정합니다. 워크플로는 Pages를 임의로 활성화하거나 기존 설정을 바꾸지 않습니다.
 2. Actions 워크플로의 저장소 쓰기 권한을 허용합니다. 조직 정책과 브랜치 보호가 `GITHUB_TOKEN`의 공개 데이터 갱신 커밋을 허용하는지 확인합니다.
-3. API를 별도로 운영하면 저장소 Actions variable `BIZ_API_BASE`에 운영 origin을 설정합니다.
+3. 현재 워크플로의 API 기본 주소는 `https://bizhannun.vercel.app`입니다. 다른 API 서버를 운영하면 저장소 Actions variable `BIZ_API_BASE`로 운영 origin을 덮어씁니다.
 4. `main` push 또는 수동 실행으로 배포하고 Actions의 Pages 배포 URL을 확인합니다.
 
 ### 수집·보존·배포 순서
@@ -70,7 +70,7 @@ npm run build
 
 ### 현재 연결 상태와 초기 직접 배포
 
-`bizhannun` 프로젝트는 Node.js 24 환경으로 생성되어 있습니다. Git 저장소 연결 요청은 필요한 Vercel GitHub App 설치가 없어 완료되지 않았습니다. 따라서 현재 Git push로 Vercel에 자동 배포되는 상태는 아닙니다. 초기 배포는 검증한 로컬 소스를 Vercel REST API로 직접 전달하는 방식으로 준비합니다.
+`bizhannun` 프로젝트는 Node.js 24 환경으로 2026-10-20에 초기 운영 배포를 완료했습니다. 공개 운영 origin은 `https://bizhannun.vercel.app`이며 `/api/health`의 익명 JSON 응답과 Pages origin의 CORS를 확인했습니다. 국세청·공정위 키는 미설정 상태입니다. Git 저장소 연결 요청은 필요한 Vercel GitHub App 설치가 없어 완료되지 않았으므로 현재 Git push로 Vercel에 자동 배포되지는 않습니다. 초기 배포는 검증한 로컬 소스를 Vercel REST API로 직접 전달했습니다.
 
 [Create a new deployment](https://vercel.com/docs/rest-api/deployments/create-a-new-deployment)의 `POST /v13/deployments` 요청에서 기존 프로젝트 식별자, 팀 식별자, `target: "production"`을 지정하고 `files` 배열로 파일을 전달합니다. 인라인 파일은 다음 형식입니다.
 

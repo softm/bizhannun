@@ -2,7 +2,9 @@
 
 사업자등록번호 조회, 거래처 확인 기록, 지원사업 탐색을 한 화면에서 사용하는 웹 앱입니다. 공개정보의 출처와 확인 시점을 표시하고, 확인하지 못한 결과와 실제 사업자 상태를 구분합니다.
 
-- 프런트엔드 배포 대상: [GitHub Pages](https://softm.github.io/bizhannun/)
+- 실행: [사업자한눈](https://softm.github.io/bizhannun/)
+- 데이터 현황: [data-status.html](https://softm.github.io/bizhannun/data-status.html)
+- API 운영 origin: [bizhannun.vercel.app](https://bizhannun.vercel.app/api/health)
 - 저장소: [softm/bizhannun](https://github.com/softm/bizhannun)
 - 운영·배포·장애 대응: [docs/OPERATIONS.md](docs/OPERATIONS.md)
 - 초기 제품 기획: [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md). 구현 완료 목록이 아닌 확장 방향을 담은 기획 문서입니다.
@@ -66,7 +68,7 @@ Pages는 화면과 공개 지원사업 JSON을 제공합니다. 공공데이터 
 
 1. 저장소의 **Settings → Pages → Build and deployment**에서 Source를 **GitHub Actions**로 설정합니다.
 2. **Settings → Actions → General → Workflow permissions**에서 워크플로가 공개 데이터 JSON을 저장소에 기록할 수 있도록 권한을 설정합니다. 브랜치 보호 정책도 해당 기록 방식과 맞아야 합니다.
-3. 별도 API 서버를 연결할 때 **Settings → Secrets and variables → Actions → Variables**에 `BIZ_API_BASE`를 서버의 HTTPS origin으로 설정합니다. 예: `https://your-project.vercel.app`. `/api`, 경로, 쿼리, 인증정보는 포함하지 않습니다.
+3. 현재 Pages 워크플로는 `https://bizhannun.vercel.app`을 API 기본 주소로 사용합니다. 서버를 바꾸려면 **Settings → Secrets and variables → Actions → Variables**의 `BIZ_API_BASE`에 새 HTTPS origin을 설정합니다. `/api`, 경로, 쿼리, 인증정보는 포함하지 않습니다.
 4. `main` push 또는 Actions의 **Collect public data and deploy Pages → Run workflow**로 배포합니다.
 
 공개 API 주소는 브라우저에 전달되는 설정값입니다. `BIZ_API_BASE`에 공공데이터 인증키를 넣으면 안 됩니다. 앱의 조회 서버 연결 화면에서도 브라우저별 서버 주소를 지정할 수 있습니다.
@@ -79,7 +81,7 @@ Pages는 화면과 공개 지원사업 JSON을 제공합니다. 공공데이터 
 
 Vercel 배포는 정적 화면과 명시적 `/api/health`, `/api/status`, `/api/validate`, `/api/commerce` 함수를 함께 제공합니다. 같은 배포 주소에서 화면을 열면 `BIZ_API_BASE`를 비워 두어도 같은 origin의 API를 사용합니다.
 
-**초기 연결 상태:** `bizhannun` Vercel 프로젝트는 Node.js 24 환경으로 준비되어 있습니다. 해당 GitHub 저장소에 필요한 Vercel GitHub App 설치가 없어 Git 저장소 연결은 완료되지 않았습니다. 초기 배포는 검증한 소스 파일을 [Vercel 배포 API](https://vercel.com/docs/rest-api/deployments/create-a-new-deployment)에 직접 전달하는 방식으로 진행할 예정입니다. Git push에 따른 Vercel 자동 배포는 현재 연결되어 있지 않습니다.
+**배포 상태:** 2026-10-20에 Node.js 24 환경으로 초기 운영 배포를 완료했습니다. [운영 API 상태](https://bizhannun.vercel.app/api/health)의 익명 접근, Pages origin의 CORS, 정상 형식·오류 형식의 요청을 검증했습니다. `NTS_SERVICE_KEY`와 `FTC_SERVICE_KEY`는 미설정이며 실제 기관 인증 조회는 아직 수행하지 않았습니다. 소스 파일을 [Vercel 배포 API](https://vercel.com/docs/rest-api/deployments/create-a-new-deployment)에 직접 전달했습니다. Vercel GitHub App이 설치되지 않아 Git push에 따른 Vercel 자동 배포는 연결되어 있지 않습니다.
 
 1. 검증한 UI·API·서버 모듈·빌드 스크립트·공개 JSON과 `package.json`, `vercel.json`을 기존 Vercel 프로젝트에 직접 배포합니다. `vercel.json`의 빌드 명령은 `npm run build`, 출력 디렉터리는 `dist`입니다. `.env.local` 등 인증키 파일은 전송하지 않습니다.
 2. 프로젝트 환경변수에 필요한 `NTS_SERVICE_KEY`, `FTC_SERVICE_KEY`, `ALLOWED_ORIGINS`를 설정합니다. 공개 Pages 화면에서 호출하려면 `https://softm.github.io` 또는 실제 운영 origin을 허용합니다.
