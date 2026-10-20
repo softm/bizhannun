@@ -55,7 +55,7 @@ function server() {
     getFirestore: (_app, id) => { hooks.databaseId = id; return db; },
     doc: (_db, ...segments) => ({ path: segments.join('/') }),
     serverTimestamp: () => ({ __serverTimestamp: true }),
-    getDocFromServer: async reference => { await hooks.beforeRead?.(reference); return document(reference.path); },
+    getDocFromServer: async reference => { await hooks.beforeRead?.(reference); return hooks.readSnapshot?.(reference) || document(reference.path); },
     writeBatch: () => {
       const writes = [];
       return { set: (reference, value) => writes.push(['set', reference, value]), delete: reference => writes.push(['delete', reference]),
@@ -68,10 +68,11 @@ function server() {
       await previous;
       try {
         const writes = [];
-        await callback({ get: async reference => document(reference.path), set: (reference, value) => writes.push(['set', reference, value]) });
-        await hooks.beforePublish?.();
+        const result = await callback({ get: async reference => hooks.transactionSnapshot?.(reference) || document(reference.path), set: (reference, value) => writes.push(['set', reference, value]) });
+        if (writes.length) await hooks.beforePublish?.();
         commit(writes);
-        await hooks.afterPublish?.();
+        if (writes.length) await hooks.afterPublish?.();
+        return result;
       } finally { release(); }
     },
     onSnapshot: (reference, _options, callback) => {
@@ -161,6 +162,55 @@ test('realtime watcher ignores its own pending save and reports remote commits',
   saved.partners[0].note = '원격 수정'; await second.cloud.save('alice', saved); await tick();
   assert.equal(first.events.length, 1); assert.equal(first.events[0].revision, 2);
   first.cloud.dispose();
+});
+
+test('first profile save confirms its commit even while one-shot listener reads retain the old head', async () => {
+  const env = server(), { cloud, events } = env.client();
+  const workspace = await cloud.load('alice');
+  cloud.watch('alice'); await tick();
+  // Firebase's getDocFromServer shares an active listener's last server view.
+  // A transaction can commit before that stream delivers the new head.
+  env.hooks.readSnapshot = reference => reference.path === headPath
+    ? { exists: () => false, data: () => undefined, metadata: { fromCache: false, hasPendingWrites: false } }
+    : undefined;
+  const saved = await cloud.save('alice', { ...workspace, profile: { name: '저장 연결 확인용 · 테스트' } });
+  assert.equal(saved.revision, 1);
+  assert.equal(env.docs.get(headPath).revision, 1);
+  assert.equal(saved.profile.name, '저장 연결 확인용 · 테스트');
+  assert.equal(events.length, 0);
+  // A rapid second save and reload must also bypass the still-old listener.
+  const second = await cloud.save('alice', { ...saved, profile: { ...saved.profile, name: '두 번째 확인' } });
+  assert.equal(second.revision, 2);
+  assert.equal((await cloud.load('alice')).profile.name, '두 번째 확인');
+  assert.equal(events.length, 0);
+  cloud.dispose();
+});
+
+test('a genuinely newer revision after our commit still requires conflict resolution', async () => {
+  const env = server(), { cloud } = env.client();
+  env.hooks.afterPublish = () => {
+    const head = env.docs.get(headPath), generation = crypto.randomUUID().replaceAll('-', '');
+    for (let part = 0; part < head.manifestParts; part++) {
+      const old = env.docs.get(`users/alice/bizhannunManifests/${head.generation}-${part}`);
+      env.docs.set(`users/alice/bizhannunManifests/${generation}-${part}`, { ...old, objectId: generation });
+    }
+    env.docs.set(headPath, { ...head, revision: head.revision + 1, generation });
+  };
+  await assert.rejects(cloud.save('alice', example()), { code: 'cloud/conflict' });
+  const latest = await env.client().cloud.load('alice');
+  assert.equal(latest.revision, 2);
+  assert.equal(latest.partners.length, 2);
+});
+
+test('an unconfirmed post-commit head reports uncertainty and retains committed records', async () => {
+  const env = server(), { cloud } = env.client();
+  env.hooks.transactionSnapshot = reference => reference.path === headPath && env.docs.has(headPath)
+    ? { exists: () => false, data: () => undefined }
+    : undefined;
+  await assert.rejects(cloud.save('alice', example()), { code: 'cloud/confirmation-pending' });
+  assert.equal(env.docs.get(headPath).revision, 1);
+  env.hooks.transactionSnapshot = null;
+  assert.equal((await env.client().cloud.load('alice')).partners.length, 2);
 });
 
 test('a history larger than one MiB is split and restored without losing entries', async () => {

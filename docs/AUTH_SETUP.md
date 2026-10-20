@@ -18,7 +18,7 @@
 
 ## 1. 구글·이메일 로그인
 
-2026-10-21 한국 시간 기준으로 Firebase Console에서 Google·이메일/비밀번호 제공자를 활성화했습니다. Google의 공개 표시 이름은 `사업자한눈`이며, `softm.github.io`와 `bizhannun.vercel.app`를 승인된 도메인에 등록했습니다. 계정 분리 설정도 저장했습니다. 실제 운영 앱의 로그인·로그아웃 검증은 배포 후 확인 항목으로 남아 있습니다.
+2026-10-21 한국 시간 기준으로 Firebase Console에서 Google·이메일/비밀번호 제공자를 활성화했습니다. Google의 공개 표시 이름은 `사업자한눈`이며, `softm.github.io`와 `bizhannun.vercel.app`를 승인된 도메인에 등록했습니다. 계정 분리 설정도 저장했습니다. 운영 Pages 앱에서 실제 Google 계정으로 로그인·로그아웃했고, 해당 UID의 Firestore 공간을 읽는 동작까지 확인했습니다. 이메일 가입·메일 전송과 카카오·네이버 실제 인증은 별도 검증 항목입니다.
 
 1. Firebase Authentication에서 사용할 제공자를 활성화합니다. 구글은 지원 이메일 등 콘솔에서 요구하는 항목을 설정합니다.
 2. Authentication의 승인된 도메인에 `softm.github.io`, `bizhannun.vercel.app`를 등록합니다. 프로토콜·경로·포트는 넣지 않습니다.
@@ -31,7 +31,7 @@
 
 ## 2. Firestore에 업무 정보 보관
 
-Enterprise Native 데이터베이스 `bizhannun`은 `asia-northeast3`에 실시간 기능을 활성화하여 생성했고, Console에서 보안 규칙을 게시한 뒤 새 활성 버전을 확인했습니다. 게시한 규칙의 SHA-256은 `32b7854f24bd2a9f28ff7f34fce12730bdeb619a9127a9d69b8b2239c1a8479b`입니다. 공식 Enterprise 에뮬레이터의 규칙 검사 7개가 모두 통과했으며, 운영 계정으로 저장·재조회하는 검증은 별도로 진행해야 합니다.
+Enterprise Native 데이터베이스 `bizhannun`은 `asia-northeast3`에 실시간 기능을 활성화하여 생성했고, Console에서 보안 규칙을 게시한 뒤 새 활성 버전을 확인했습니다. 게시한 규칙의 SHA-256은 `32b7854f24bd2a9f28ff7f34fce12730bdeb619a9127a9d69b8b2239c1a8479b`입니다. 공식 Enterprise 에뮬레이터에서 규칙 검사를 통과했으며, 운영 Google 계정의 프로필을 저장한 뒤 다시 불러와 revision 1을 확인했습니다. 저장 직후 확인 과정에서 발견한 충돌 안내 문제와 수정 검증 범위는 [검증 기록](VERIFICATION.md)에 남깁니다.
 
 - 앱과 데이터베이스는 같은 Firebase 프로젝트를 사용합니다.
 - 기본 연결 대상은 `bizhannun` 데이터베이스입니다. `(default)` 데이터베이스와 혼동하지 않도록 콘솔의 데이터베이스 선택기를 확인합니다.

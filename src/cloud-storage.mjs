@@ -129,9 +129,18 @@ export function createCloudWorkspace({ sdk, app, auth, config = {}, onStatus = (
   };
   const getHead = async (uid, operationEpoch) => {
     assertUser(uid, operationEpoch);
-    const snapshot = await timed(sdk.getDocFromServer(headRef(uid)));
+    // getDocFromServer shares an existing listener's last server snapshot. A
+    // transaction can finish before that watch stream receives its new head.
+    // Read the mutable pointer through a fresh server transaction so a stale
+    // listener view cannot turn our own successful commit into a conflict.
+    const head = await timed(sdk.runTransaction(db, async transaction => {
+      assertUser(uid, operationEpoch);
+      const snapshot = await transaction.get(headRef(uid));
+      assertUser(uid, operationEpoch);
+      return snapshot.exists() ? validateHead(snapshot.data(), uid) : null;
+    }, { maxAttempts: 3 }));
     assertUser(uid, operationEpoch);
-    return snapshot.exists() ? validateHead(snapshot.data(), uid) : null;
+    return head;
   };
 
   async function readBody(uid, collection, descriptor, kind, operationEpoch) {
@@ -292,6 +301,7 @@ export function createCloudWorkspace({ sdk, app, auth, config = {}, onStatus = (
       }, { maxAttempts: 3 }));
       published = true;
       const confirmed = await getHead(uid, operationEpoch);
+      if (!confirmed || confirmed.revision < expected + 1) fail('cloud/confirmation-pending', '저장 요청은 처리되었지만 최신 저장 버전을 확인하지 못했습니다. 현재 입력을 보관하고 계정 기록을 다시 불러와 주세요.');
       if (confirmed?.generation !== generation || confirmed.revision !== expected + 1) throw new CloudConflictError();
       const workspace = { ...normalized, revision: confirmed.revision, updatedAt: timestampIso(confirmed.updatedAt) };
       loaded = { uid, head: confirmed, workspace, records };

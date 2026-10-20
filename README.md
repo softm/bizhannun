@@ -2,7 +2,7 @@
 
 사업자등록번호 조회, 거래처 확인 기록, 지원사업 탐색을 한 화면에서 사용하는 웹 앱입니다. v0.2에서는 Firebase 로그인과 계정별 Firestore 정보 보관을 연결합니다. 공개정보의 출처와 확인 시점을 표시하고, 확인하지 못한 결과와 실제 사업자 상태를 구분합니다.
 
-- 실행: [사업자한눈](https://softm.github.io/bizhannun/)
+- 실행: [사업자한눈](https://softm.github.io/bizhannun/) · [로그인·계정 보관](https://softm.github.io/bizhannun/#account)
 - 데이터 현황: [data-status.html](https://softm.github.io/bizhannun/data-status.html)
 - API 운영 origin: [bizhannun.vercel.app](https://bizhannun.vercel.app/api/health)
 - 저장소: [softm/bizhannun](https://github.com/softm/bizhannun)
@@ -89,7 +89,7 @@ Vercel 배포는 정적 화면과 `/api/health`, `/api/status`, `/api/validate`,
 
 **배포 상태:** 2026-10-20에 Node.js 24 환경으로 초기 운영 배포를 완료했습니다. [운영 API 상태](https://bizhannun.vercel.app/api/health)의 익명 접근, Pages origin의 CORS, 정상 형식·오류 형식의 요청을 검증했습니다. `NTS_SERVICE_KEY`와 `FTC_SERVICE_KEY`는 미설정이며 실제 기관 인증 조회는 아직 수행하지 않았습니다. 소스 파일을 [Vercel 배포 API](https://vercel.com/docs/rest-api/deployments/create-a-new-deployment)에 직접 전달했습니다. Vercel GitHub App이 설치되지 않아 Git push에 따른 Vercel 자동 배포는 연결되어 있지 않습니다.
 
-v0.2의 Firebase 프로젝트 `biz-hannun`, 웹 앱 `bizhannun-web`, Enterprise Native 데이터베이스 `bizhannun`을 생성했습니다. 데이터베이스 위치는 `asia-northeast3`이며 실시간 기능을 활성화했습니다. Google·이메일/비밀번호 제공자 활성화, 승인 도메인 등록, 제공자별 계정 분리 설정과 보안 규칙 게시를 Console에서 확인했습니다. 운영 배포와 실제 계정 로그인·자료 저장 검증은 [검증 기록](docs/VERIFICATION.md)에서 별도로 추적합니다.
+v0.2의 Firebase 프로젝트 `biz-hannun`, 웹 앱 `bizhannun-web`, Enterprise Native 데이터베이스 `bizhannun`을 생성했습니다. 데이터베이스 위치는 `asia-northeast3`이며 실시간 기능을 활성화했습니다. Google·이메일/비밀번호 제공자 활성화, 승인 도메인 등록, 제공자별 계정 분리 설정과 보안 규칙 게시를 Console에서 확인했습니다. v0.2 Pages·Vercel 배포를 완료했고 운영 Google 로그인·로그아웃, 프로필 저장 후 재조회까지 확인했습니다. 저장 직후 확인 로직의 보완과 남은 실제 계정 검증 범위는 [검증 기록](docs/VERIFICATION.md)에 구분해서 기록합니다.
 
 1. 검증한 UI·API·서버 모듈·빌드 스크립트·공개 JSON과 `package.json`, `vercel.json`을 기존 Vercel 프로젝트에 직접 배포합니다. `vercel.json`의 빌드 명령은 `npm run build`, 출력 디렉터리는 `dist`입니다. `.env.local` 등 인증키 파일은 전송하지 않습니다.
 2. 프로젝트 환경변수에 필요한 `NTS_SERVICE_KEY`, `FTC_SERVICE_KEY`, `ALLOWED_ORIGINS`를 설정합니다. 공개 Pages 화면에서 호출하려면 `https://softm.github.io` 또는 실제 운영 origin을 허용합니다.

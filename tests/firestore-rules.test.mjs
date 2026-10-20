@@ -22,6 +22,31 @@ test('Firestore emulator: owner storage, cross-user isolation, schema and optimi
   const fragment = (objectId, changes = {}) => ({ ownerUid: uid, format: 1, kind: 'partner', objectId, part: 0, parts: 1, body: '{}', createdAt: sdk.serverTimestamp(), ...changes });
   let ownerCloud, latest, savedObjectPath;
 
+  await t.test('the first profile save succeeds while its empty workspace is watched', async () => {
+    const profileUid = 'first-profile-save';
+    const database = env.authenticatedContext(profileUid).firestore();
+    const changes = [];
+    let ready;
+    const listening = new Promise(resolve => { ready = resolve; });
+    const cloud = createCloudWorkspace({ sdk: { ...sdk, getFirestore: () => database,
+      onSnapshot: (reference, options, next, error) => sdk.onSnapshot(reference, options, snapshot => {
+        if (!snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites) ready();
+        next(snapshot);
+      }, error),
+    }, app: {}, auth: { currentUser: { uid: profileUid } }, onRemoteChange: change => changes.push(change) });
+    try {
+      const workspace = await cloud.load(profileUid);
+      cloud.watch(profileUid); await listening;
+      const saved = await cloud.save(profileUid, { ...workspace, profile: { name: '저장 연결 확인용 · 테스트' } });
+      assert.equal(saved.revision, 1);
+      assert.equal(saved.profile.name, '저장 연결 확인용 · 테스트');
+      assert.equal(changes.length, 0);
+      const reloaded = await cloud.load(profileUid);
+      assert.equal(reloaded.revision, 1);
+      assert.equal(reloaded.profile.name, saved.profile.name);
+    } finally { cloud.dispose(); }
+  });
+
   await t.test('owner can store, modify, reload and remove records with the real modular SDK', async () => {
     ownerCloud = createCloud();
     const snapshot = { businessNumber: '1000000009', outcome: 'ok', businessStatus: 'active', statusLabel: '계속사업자', taxType: '일반과세자', closedAt: null, checkedAt: NOW, source: '국세청' };

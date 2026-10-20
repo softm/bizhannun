@@ -83,7 +83,7 @@ npm run build
 
 ### 현재 연결 상태와 초기 직접 배포
 
-`bizhannun` 프로젝트는 Node.js 24 환경으로 2026-10-20에 초기 운영 배포를 완료했습니다. 공개 운영 origin은 `https://bizhannun.vercel.app`이며 `/api/health`의 익명 JSON 응답과 Pages origin의 CORS를 확인했습니다. 국세청·공정위 키는 미설정 상태입니다. Git 저장소 연결 요청은 필요한 Vercel GitHub App 설치가 없어 완료되지 않았으므로 현재 Git push로 Vercel에 자동 배포되지는 않습니다. 초기 배포는 검증한 로컬 소스를 Vercel REST API로 직접 전달했습니다.
+`bizhannun` 프로젝트는 Node.js 24 환경으로 2026-10-20에 초기 운영 배포를 완료했고, 2026-10-21 한국 시간에 v0.2 로그인·공개 설정 API를 운영 배포했습니다. 공개 운영 origin은 `https://bizhannun.vercel.app`이며 `/api/health`의 익명 JSON 응답과 Pages origin의 CORS를 확인했습니다. 국세청·공정위 키는 미설정 상태입니다. Git 저장소 연결 요청은 필요한 Vercel GitHub App 설치가 없어 완료되지 않았으므로 현재 Git push로 Vercel에 자동 배포되지는 않습니다. 초기 배포는 검증한 로컬 소스를 Vercel REST API로 직접 전달했습니다.
 
 [Create a new deployment](https://vercel.com/docs/rest-api/deployments/create-a-new-deployment)의 `POST /v13/deployments` 요청에서 기존 프로젝트 식별자, 팀 식별자, `target: "production"`을 지정하고 `files` 배열로 파일을 전달합니다. 인라인 파일은 다음 형식입니다.
 
