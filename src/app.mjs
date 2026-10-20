@@ -2,6 +2,8 @@ import { normalizeBusinessNumber, formatBusinessNumber, isValidBusinessNumber, p
 import { emptyWorkspace, loadWorkspace, saveWorkspace, downloadText, validateBackup } from './storage.mjs';
 import { callApi, validateApiBase, failureResult } from './api-client.mjs';
 import { loadPrograms, rankPrograms } from './programs.mjs';
+import { createAuthClient } from './auth.mjs';
+import { createCloudWorkspace, mergeGuestWorkspace } from './cloud-storage.mjs';
 
 const paths = {
  search:'M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
@@ -45,9 +47,22 @@ const number = value => new Intl.NumberFormat('ko-KR').format(value || 0);
 const regions = ['서울','부산','대구','인천','광주','대전','울산','세종','경기','강원','충북','충남','전북','전남','경북','경남','제주'];
 const regionSummary = values => !values?.length ? '지역 원문 확인' : values.includes('전국') || regions.every(region=>values.includes(region)) ? '전국' : values.slice(0,3).join(' · ')+(values.length>3?` 외 ${values.length-3}개 지역`:'');
 const statusNames = {active:'계속사업자',suspended:'휴업자',closed:'폐업자',unknown:'미확인'};
-const titles = {lookup:'사업자 조회',partners:'거래처 관리',programs:'지원사업 찾기',profile:'내 사업',history:'변경 기록',data:'데이터 현황'};
-const navItems = [['lookup','search'],['partners','folder'],['programs','spark'],['profile','building'],['history','clock'],['data','database']];
+const titles = {lookup:'사업자 조회',partners:'거래처 관리',programs:'지원사업 찾기',profile:'내 사업',history:'변경 기록',account:'계정 · 동기화',data:'데이터 현황'};
+const navItems = [['lookup','search'],['partners','folder'],['programs','spark'],['profile','building'],['history','clock'],['account','user'],['data','database']];
 let workspace = emptyWorkspace();
+let guestWorkspace = emptyWorkspace();
+let authClient;
+let authState = { phase:'initializing', user:null, configured:false, providers:{} };
+let activeUid = null;
+let accountEpoch = 0;
+let accountTransition = false;
+let cloudReady = false;
+let cloudStore;
+let cloudStatus = { phase:'guest', message:'' };
+let remoteRevision = 0;
+let accountError = '';
+let accountNotice = '';
+let authMode = 'signin';
 let storageError = '';
 let saving = false;
 let health = null;
@@ -93,17 +108,160 @@ function toast(message, error=false) {
   toastTimer=setTimeout(()=>document.getElementById('toast-root').replaceChildren(),error?6500:3500);
 }
 async function persist(next) {
-  if (saving) { toast('저장 중입니다. 잠시 후 다시 시도해 주세요.'); return false; }
+  if (saving || accountTransition || authBusy() || (authState.user?.uid || null) !== activeUid) { toast('계정 연결 또는 저장 중입니다. 잠시 후 다시 시도해 주세요.'); return false; }
+  if (activeUid && !cloudReady) { toast('계정 기록을 먼저 불러와 주세요.',true); return false; }
+  const epoch=accountEpoch, uid=activeUid, store=cloudStore;
   saving=true;
   try {
-    workspace=await saveWorkspace(next);
+    const saved = uid ? await store.save(uid,next) : await saveWorkspace(next);
+    if(epoch!==accountEpoch || uid!==activeUid)return false;
+    workspace={...saved,preferences:uid?guestWorkspace.preferences:saved.preferences};
+    if(!uid)guestWorkspace=structuredClone(workspace);
     storageError='';
+    remoteRevision=0;
     return true;
   } catch(error) {
-    storageError=error.message || '브라우저 저장에 실패했습니다.';
+    if(epoch!==accountEpoch)return false;
+    storageError=error.message || '정보를 저장하지 못했습니다.';
     toast(storageError,true);
     return false;
-  } finally { saving=false; render(); }
+  } finally { if(epoch===accountEpoch){saving=false;render();} }
+}
+function authBusy(){return ['initializing','authenticating','signing-out'].includes(authState.phase)||accountTransition;}
+function userLabel(){return authState.user?.displayName||authState.user?.email?.split('@')[0]||'내 계정';}
+function accountStorageStatus(){
+  if(!authState.user)return {label:authState.phase==='initializing'?'연결 확인 중':authState.configured?'로그인 필요':'로그인 설정 확인 필요',tone:'neutral',message:authState.error||'현재 자료는 이 기기에 보관합니다. 로그인하면 계정에 저장한 기록을 불러옵니다.'};
+  if(accountTransition||cloudStatus.phase==='loading')return {label:'불러오는 중',tone:'neutral',message:'계정의 기록을 서버에서 확인하고 있습니다.'};
+  if(saving||cloudStatus.phase==='saving')return {label:'저장 중',tone:'neutral',message:'서버의 저장 완료 응답을 기다리고 있습니다.'};
+  if(cloudStatus.phase==='error'||storageError||accountError)return {label:'동기화 확인 필요',tone:'warning',message:storageError||accountError||cloudStatus.message};
+  if(remoteRevision||cloudStatus.phase==='conflict')return {label:'최신 기록 확인 필요',tone:'warning',message:'다른 기기에서 기록이 변경되었습니다. 작성 중인 내용을 보관한 뒤 최신 기록을 불러와 주세요.'};
+  if(!cloudReady)return {label:'계정 연결 확인 필요',tone:'warning',message:'아직 계정의 기록을 불러오지 못했습니다.'};
+  return {label:workspace.revision?'서버 확인 완료':'계정 저장소 연결됨',tone:'positive',message:workspace.revision?'계정에 저장된 기록을 서버에서 확인했습니다.':'계정 저장소에 연결되었습니다. 아직 저장한 기록은 없습니다.'};
+}
+async function receiveAuthState(state){
+  authState=state;
+  const nextUid=state.user?.uid||null;
+  if(['ready','unconfigured','error'].includes(state.phase)&&nextUid!==activeUid)await switchAccount(nextUid);
+  render();
+}
+async function switchAccount(uid){
+  const epoch=++accountEpoch;
+  cloudStore?.dispose();cloudStore=null;
+  activeUid=uid;cloudReady=false;accountTransition=true;saving=false;
+  accountError='';accountNotice='';storageError='';remoteRevision=0;
+  lookupSerial++;restoreSelection++;importSelection++;
+  ui.lookup=null;ui.lookupBusy=false;ui.commerce=null;ui.profileDraft=null;
+  ui.batchBusy=false;selected.clear();if(modal)closeModal();
+  workspace={...emptyWorkspace(),preferences:guestWorkspace.preferences};render();
+  try{
+    if(!uid){workspace=structuredClone(guestWorkspace);cloudStatus={phase:'guest',message:'이 기기에 저장'};}
+    else{
+      const context=authClient.getContext();
+      cloudStore=createCloudWorkspace({...context,onStatus:status=>{if(epoch===accountEpoch){cloudStatus=status;render();}},onRemoteChange:change=>{
+        if(epoch===accountEpoch&&change.uid===activeUid&&change.revision>workspace.revision){remoteRevision=change.revision;render();}
+      }});
+      const loaded=await cloudStore.load(uid);
+      if(epoch!==accountEpoch)return;
+      workspace={...loaded,preferences:guestWorkspace.preferences};cloudReady=true;cloudStore.watch(uid);
+    }
+  }catch(error){if(epoch===accountEpoch){accountError=error.message;cloudStatus={phase:'error',message:accountError};}}
+  finally{if(epoch===accountEpoch){accountTransition=false;render();}}
+}
+async function reloadCloud(){
+  if(!activeUid||!cloudStore||saving)return;
+  const epoch=accountEpoch;accountTransition=true;accountError='';render();
+  try{
+    const loaded=await cloudStore.load(activeUid);
+    if(epoch!==accountEpoch)return;
+    workspace={...loaded,preferences:guestWorkspace.preferences};cloudReady=true;
+    ui.profileDraft=null;storageError='';remoteRevision=0;accountNotice='';
+    cloudStore.watch(activeUid);toast('계정의 최신 기록을 불러왔습니다.');
+  }catch(error){if(epoch===accountEpoch)accountError=error.message;}
+  finally{if(epoch===accountEpoch){accountTransition=false;render();}}
+}
+async function runAuth(task){
+  if(authBusy()||saving||ui.batchBusy)return;
+  accountError='';accountNotice='';
+  try{await task();}
+  catch(error){accountError=error.message||'로그인을 완료하지 못했습니다.';}
+  render();
+}
+function accountConfirm(action,title,message){
+  openModal(title,`<p class="fine-print">${esc(message)}</p><div class="modal-actions"><button class="button" data-action="close-modal">취소</button><button class="button primary" data-action="${action}">계속하기</button></div>`);
+  modal.accountEpoch=accountEpoch;
+}
+function workspaceNotice(){
+  if(accountTransition)return '<div class="callout storage-warning" role="status"><span class="spinner"></span><span>계정의 기록을 불러오고 있습니다.</span></div>';
+  if(remoteRevision)return '<div class="callout warning storage-warning"><span>다른 기기에서 기록이 변경되었습니다. <button class="text-button" data-action="cloud-reload-confirm">최신 기록 확인</button></span></div>';
+  if(activeUid&&!cloudReady)return `<div class="callout warning storage-warning"><span>${esc(accountError||'계정 저장소 연결을 확인해 주세요.')} <button class="text-button" data-nav="account">계정 상태 확인</button></span></div>`;
+  return '';
+}
+function accountView(){
+  const user=authState.user,busy=authBusy()||saving,sync=accountStorageStatus();
+  if(user){
+    const guestCount=guestWorkspace.partners.length,hasGuest=guestCount||guestWorkspace.events.length||guestWorkspace.checks.length||Object.keys(guestWorkspace.profile||{}).length;
+    return pageHeading('내 계정, 이어지는 기록','거래처와 사업 정보를 같은 계정으로 다른 기기에서도 확인하세요.')+`
+    <div class="account-layout"><section class="card account-card">
+      <div class="account-identity"><span class="account-avatar">${icon('user')}</span><div><h2>${esc(userLabel())}</h2><p class="fine-print">${esc(user.email||'SNS로 로그인한 계정')}</p></div><span class="badge positive dot">로그인됨</span></div>
+      <div class="divider"></div><h3>계정에 보관하는 정보</h3><p class="fine-print">거래처, 메모·태그, 사업 프로필, 조회 이력과 변경 기록을 Firestore에 저장합니다. 로그인한 본인 계정에서만 읽고 수정할 수 있습니다.</p>
+      <dl class="detail-grid section-spacer"><div class="detail-fact"><dt>저장 상태</dt><dd><span class="badge ${sync.tone} dot">${esc(sync.label)}</span></dd></div><div class="detail-fact"><dt>마지막 저장</dt><dd>${esc(fmtTime(workspace.updatedAt))}</dd></div><div class="detail-fact"><dt>거래처</dt><dd>${number(workspace.partners.length)}곳</dd></div><div class="detail-fact"><dt>저장 버전</dt><dd>${number(workspace.revision)}</dd></div></dl>
+      <div class="callout ${sync.tone==='warning'?'warning':''} section-spacer" role="status"><span>${esc(sync.message)}</span></div>
+      <div class="button-row section-spacer"><button class="button primary" data-action="cloud-reload-confirm" ${busy?'disabled':''}>${icon('refresh')} 계정 기록 다시 불러오기</button><button class="button" data-action="backup">${icon('download')} 전체 백업</button></div>
+      ${user.providerIds?.includes('password')&&!user.emailVerified?`<div class="callout warning section-spacer"><span>이메일 확인이 필요합니다. 받은 메일의 링크를 열어 주세요. <button class="text-button" data-action="auth-verify" ${busy?'disabled':''}>인증 메일 다시 보내기</button></span></div>`:''}
+      <div class="divider"></div><button class="button" data-action="auth-signout" ${busy||ui.batchBusy?'disabled':''}>로그아웃</button><p class="fine-print" style="margin-top:12px">로그아웃하면 이 기기에만 저장한 자료로 돌아갑니다. 계정 자료는 Firestore에 보관됩니다.</p>
+    </section><section class="card account-card"><h2>이 기기의 기존 자료</h2><p class="fine-print">로그인 전에 저장한 자료는 계정 자료와 따로 보관돼 있습니다. 가져오기를 선택하면 현재 계정에 추가합니다.</p><div class="migration-count">${number(guestCount)}<span>곳의 거래처</span></div><p class="fine-print">같은 사업자번호가 있으면 계정에 저장된 거래처를 유지합니다. 가져온 뒤에도 이 기기의 원본은 남습니다.</p><button class="button primary section-spacer" data-action="guest-import-preview" ${!hasGuest||!cloudReady||busy?'disabled':''}>${icon('upload')} 기존 자료 가져오기</button><div class="divider"></div><h3>다른 기기에서 이어서 쓰기</h3><p class="fine-print">같은 로그인 방식과 같은 계정을 선택하세요. 카카오·네이버·구글·이메일 계정은 이메일 주소가 같아도 자동으로 합쳐지지 않습니다.</p></section></div>
+    ${accountNotice?`<div class="callout section-spacer" role="status"><span>${esc(accountNotice)}</span></div>`:''}`;
+  }
+  const providers=[['kakao','카카오로 시작하기','K'],['naver','네이버로 시작하기','N'],['google','Google로 시작하기','G']];
+  return pageHeading('어디서든, 내 사업의 기록','로그인하면 거래처·메모·프로필·조회 이력이 계정에 저장됩니다.')+`
+  <div class="account-layout"><section class="card account-card signin-card"><h2>간편하게 로그인</h2><p class="fine-print">같은 계정으로 로그인해 다른 기기에서도 이어서 사용하세요.</p>
+    <div class="social-buttons">${providers.map(([key,label,mark])=>`<button class="social-button ${key}" data-action="auth-provider" data-provider="${key}" ${busy||!authState.providers?.[key]?.configured?'disabled':''}><span class="social-mark">${mark}</span><span>${label}</span>${!authState.providers?.[key]?.configured?'<small>준비 중</small>':''}</button>`).join('')}</div>
+    ${authState.phase==='initializing'?'<div class="inline-loading"><span class="spinner"></span>로그인 연결 확인 중</div>':''}
+    ${authState.error?`<div class="callout warning"><span>${esc(authState.error)}</span></div>`:''}
+    ${['error','unconfigured'].includes(authState.phase)?'<button class="text-button section-spacer" data-action="auth-retry">연결 다시 확인</button>':''}
+    ${authState.providers?.email?.configured?`<div class="auth-divider"><span>또는 이메일로</span></div><div class="auth-tabs"><button class="${authMode==='signin'?'active':''}" data-action="auth-mode" data-mode="signin">로그인</button><button class="${authMode==='signup'?'active':''}" data-action="auth-mode" data-mode="signup">회원가입</button></div><form id="auth-email-form"><div class="form-field"><label for="auth-email">이메일</label><input id="auth-email" name="email" type="email" required autocomplete="email" maxlength="254"></div>${authMode!=='reset'?`<div class="form-field"><label for="auth-password">비밀번호</label><input id="auth-password" name="password" type="password" required minlength="${authMode==='signup'?8:1}" maxlength="4096" autocomplete="${authMode==='signup'?'new-password':'current-password'}"></div>`:''}<button class="button primary auth-submit" type="submit" ${busy?'disabled':''}>${authMode==='signup'?'이메일로 가입하기':authMode==='reset'?'재설정 메일 받기':'이메일로 로그인'}</button></form><button class="text-button" style="margin-top:14px" data-action="auth-mode" data-mode="${authMode==='reset'?'signin':'reset'}">${authMode==='reset'?'로그인으로 돌아가기':'비밀번호를 잊으셨나요?'}</button>`:''}
+    ${accountError?`<p class="field-error" role="alert">${esc(accountError)}</p>`:''}${accountNotice?`<p class="fine-print" role="status">${esc(accountNotice)}</p>`:''}
+  </section><section class="card account-card account-benefits"><div class="account-hero-icon">${icon('shield')}</div><h2>정보도 함께 저장합니다</h2><div class="guide-step"><span class="step-number">01</span><div><h3>거래처와 메모</h3><p>거래처, 분류 태그와 업무 메모를 계정에 보관합니다.</p></div></div><div class="guide-step"><span class="step-number">02</span><div><h3>조회 이력과 내 사업</h3><p>사업자 상태 조회와 변경 기록, 지원사업 탐색용 프로필을 함께 저장합니다.</p></div></div><div class="guide-step"><span class="step-number">03</span><div><h3>기존 자료 이어 쓰기</h3><p>이 브라우저의 자료는 로그인 후 가져오기로 옮길 수 있습니다.</p></div></div><div class="divider"></div><p class="fine-print">로그인 없이도 이 기기에 저장하며 사용할 수 있습니다. 로그아웃 상태의 자료는 다른 기기와 동기화되지 않습니다.</p><button class="button section-spacer" data-nav="partners">이 기기에서 계속하기 ${icon('arrow')}</button></section></div>`;
+}
+async function handleAccountAction(action,element){
+  if(action==='auth-provider'){await runAuth(()=>authClient.signIn(element.dataset.provider));return true;}
+  if(action==='auth-retry'){await authClient.init();return true;}
+  if(action==='auth-mode'){authMode=['signin','signup','reset'].includes(element.dataset.mode)?element.dataset.mode:'signin';accountError='';accountNotice='';render();return true;}
+  if(action==='auth-verify'){await runAuth(async()=>{await authClient.sendVerification();accountNotice='인증 메일을 보냈습니다.';});return true;}
+  if(action==='auth-signout'){
+    if(ui.profileDraft){accountConfirm('auth-signout-confirm','로그아웃할까요?','저장하지 않은 사업 프로필 입력은 사라집니다. 먼저 저장하거나 백업한 뒤 계속해 주세요.');}
+    else await runAuth(()=>authClient.signOut());
+    return true;
+  }
+  if(action==='auth-signout-confirm'){
+    if(modal?.accountEpoch!==accountEpoch)return true;closeModal();await runAuth(()=>authClient.signOut());return true;
+  }
+  if(action==='cloud-reload-confirm'){
+    if(ui.profileDraft){accountConfirm('cloud-reload','계정 기록 다시 불러오기','작성 중인 사업 프로필을 서버에 저장된 기록으로 바꿉니다. 필요한 입력을 보관한 뒤 계속해 주세요.');}
+    else await reloadCloud();return true;
+  }
+  if(action==='cloud-reload'){if(modal?.accountEpoch!==accountEpoch)return true;closeModal();await reloadCloud();return true;}
+  if(action==='guest-import-preview'){
+    if(!activeUid||!cloudReady||saving)return true;
+    try{
+      const merged=mergeGuestWorkspace(workspace,guestWorkspace);
+      openModal('기존 자료를 계정으로 가져오기',`<p class="fine-print">새 거래처 <strong>${number(merged.addedPartners)}곳</strong>을 추가합니다. 같은 사업자번호 <strong>${number(merged.duplicatePartners)}곳</strong>은 계정 기록을 유지합니다. 계정 프로필이 비어 있으면 기기의 프로필을 가져옵니다. 기기의 원본은 남습니다.</p><div class="modal-actions"><button class="button" data-action="close-modal">취소</button><button class="button primary" data-action="guest-import-confirm">현재 계정에 가져오기</button></div>`);
+      modal.accountEpoch=accountEpoch;modal.merge=merged.workspace;
+    }catch(error){toast(error.message,true);}return true;
+  }
+  if(action==='guest-import-confirm'){
+    if(modal?.accountEpoch!==accountEpoch||!modal.merge)return true;
+    if(await persist(modal.merge)){closeModal();toast('기존 자료를 계정에 가져왔습니다. 이 기기의 원본도 보관됩니다.');}return true;
+  }
+  return false;
+}
+async function submitAuth(form){
+  const data=new FormData(form),email=String(data.get('email')||''),password=String(data.get('password')||'');
+  await runAuth(async()=>{
+    if(authMode==='reset'){await authClient.resetPassword(email);accountNotice='입력한 주소로 재설정 안내를 요청했습니다. 받은 메일을 확인해 주세요.';}
+    else if(authMode==='signup'){const result=await authClient.signUpEmail(email,password);accountNotice=result?.warning||'계정을 만들었습니다. 이메일 인증 안내를 확인해 주세요.';}
+    else await authClient.signInEmail(email,password);
+  });
 }
 function pageHeading(title,description,action='') {
   return `<div class="page-heading"><div><div class="eyebrow">BIZHANNUN WORKSPACE</div><h1>${title}</h1><p>${description}</p></div>${action}</div>`;
@@ -124,23 +282,23 @@ function shell(content) {
     <div class="brand-sub">BUSINESS AT A GLANCE</div>
     <nav>${nav}</nav>
     <div class="side-spacer"></div>
-    <div class="local-card">${icon('shield')}<div><strong>내 브라우저에 보관</strong>거래처와 메모는 이 기기에 저장돼요.<br>백업으로 기록을 보관하세요.</div></div>
-    <div class="side-foot"><span>© bizhannun</span><span>v0.1</span></div>
+    <div class="local-card">${icon('shield')}<div><strong>${authState.user?'내 계정에 보관':'이 기기에 보관'}</strong>${authState.user?esc(accountStorageStatus().label):'로그인하면 다른 기기에서도<br>내 기록을 이어서 볼 수 있어요.'}</div></div>
+    <div class="side-foot"><span>© bizhannun</span><span>v0.2</span></div>
   </aside>
   <div class="main-wrap">
     <header class="topbar">
       <div class="mobile-header-left"><button class="icon-button mobile-nav-toggle" data-action="toggle-menu" aria-label="메뉴 열기" aria-expanded="${ui.mobileMenu}">${icon('menu')}</button><a class="brand mobile-brand" href="./#lookup" data-nav="lookup"><img class="brand-mark" src="./assets/favicon.svg" alt="">사업자한눈</a></div>
       <div class="breadcrumb">내 워크스페이스 ${icon('chevron')} <span>${titles[view]}</span></div>
-      <div class="top-tools"><span class="date-label">${new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'long',day:'numeric',weekday:'long'}).format(new Date())}</span><button class="icon-button notice-button" data-action="goto-history" aria-label="변경 기록 보기">${icon('bell')}${workspace.events.some(e=>!e.acknowledgedAt)?'<span class="notification-count">!</span>':''}</button><div class="workspace-label"><span class="avatar">${icon('user')}</span><span>개인 워크스페이스</span></div></div>
+      <div class="top-tools"><span class="date-label">${new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'long',day:'numeric',weekday:'long'}).format(new Date())}</span><button class="icon-button notice-button" data-action="goto-history" aria-label="변경 기록 보기">${icon('bell')}${workspace.events.some(e=>!e.acknowledgedAt)?'<span class="notification-count">!</span>':''}</button><button class="account-trigger" data-nav="account"><span class="avatar">${icon('user')}</span><span>${authState.user?esc(userLabel()):'로그인'}</span></button></div>
     </header>
-    <main class="main-content" id="main-content" tabindex="-1">${storageError?`<div class="callout error storage-warning">${icon('info')}<span>${esc(storageError)} 현재 변경사항을 저장하지 못할 수 있습니다.</span></div>`:''}${content}${footer()}</main>
+    <main class="main-content" id="main-content" tabindex="-1">${workspaceNotice()}${storageError?`<div class="callout error storage-warning">${icon('info')}<span>${esc(storageError)} 현재 변경사항을 저장하지 못할 수 있습니다.</span></div>`:''}${content}${footer()}</main>
   </div></div>`;
 }
 function render() {
   const active=document.activeElement;
   const focusId=active?.id;
   const sel=active&&'selectionStart'in active?active.selectionStart:null;
-  const views={lookup:lookupView,partners:partnersView,programs:programsView,profile:profileView,history:historyView,data:dataView};
+  const views={lookup:lookupView,partners:partnersView,programs:programsView,profile:profileView,history:historyView,account:accountView,data:dataView};
   app.innerHTML=shell((views[ui.view]||lookupView)());
   if(focusId) {
     const next=document.getElementById(focusId);
@@ -217,7 +375,7 @@ function filteredPartners() {
 function partnersView() {
   const rows=filteredPartners();
   return pageHeading('함께하는 거래처를 한눈에','확인한 사실은 남기고, 달라진 정보는 다시 살펴보세요.',`<div class="button-row"><button class="button" data-action="import">${icon('upload')} CSV 가져오기</button><button class="button primary" data-action="add-partner">${icon('plus')} 거래처 등록</button></div>`)+`
-  <div class="callout">${icon('shield')}<span>거래처·메모·확인 기록은 <strong>이 브라우저에만 저장</strong>됩니다. 다른 기기로 옮길 때는 백업 파일을 이용하세요.</span></div>
+  <div class="callout">${icon('shield')}<span>${authState.user?'거래처·메모·확인 기록을 <strong>내 계정에 저장</strong>합니다. 같은 계정으로 다른 기기에서도 이어서 확인하세요.':'거래처·메모·확인 기록은 <strong>이 기기에 저장</strong>합니다. 로그인하면 계정으로 가져와 다른 기기에서도 사용할 수 있습니다.'}</span></div>
   <div class="toolbar"><div class="filter-group"><div class="input-wrap">${icon('search')}<input id="partner-search" placeholder="업체명, 사업자번호, 태그 검색" value="${esc(ui.partnerQuery)}" aria-label="거래처 검색"></div><select id="partner-status" class="filter-select" aria-label="거래처 상태 필터"><option value="all">모든 상태</option>${[['active','계속사업자'],['suspended','휴업자'],['closed','폐업자'],['unchecked','확인 전'],['error','미확인·조회 실패']].map(([v,t])=>`<option value="${v}" ${ui.partnerStatus===v?'selected':''}>${t}</option>`).join('')}</select></div><div class="button-row"><button class="button small" data-action="export-csv" ${!workspace.partners.length?'disabled':''}>${icon('download')} CSV</button><button class="button small" data-action="import">${icon('upload')} 가져오기</button><button class="button light small" data-action="add-partner">${icon('plus')} 등록</button></div></div>
   ${selected.size?`<div class="selected-bar"><span>${selected.size}곳 선택</span><div class="button-row"><button class="button primary small" data-action="batch-check" data-scope="selected" ${ui.batchBusy?'disabled':''}>${icon('refresh')} 선택 거래처 확인</button><button class="text-button" data-action="deselect">선택 해제</button></div></div>`:''}
   ${ui.batchBusy?`<div class="callout"><span class="spinner"></span><div style="flex:1">상태 확인 중 · ${ui.batchDone}/${ui.batchTotal}곳<div class="progress-strip"><span style="width:${ui.batchTotal?ui.batchDone/ui.batchTotal*100:0}%"></span></div></div></div>`:''}
@@ -257,7 +415,7 @@ function profileView() {
   const p=ui.profileDraft||workspace.profile;
   return pageHeading('내 사업을 알려주세요','공개정보로 채워지지 않는 항목을 보완하면, 기회를 찾기 쉬워져요.')+`
   <div class="profile-layout"><form id="profile-form" class="card form-card">
-  <div class="section-row"><h2 class="section-title">사업 프로필</h2><span class="mode-label">이 브라우저에 저장</span></div>
+  <div class="section-row"><h2 class="section-title">사업 프로필</h2><span class="mode-label">${authState.user?'내 계정에 저장':'이 기기에 저장'}</span></div>
   <div class="form-grid">
     <div class="form-field"><label for="profile-name">사업체명</label><input id="profile-name" name="name" maxlength="200" value="${esc(p.name||'')}" placeholder="사업체 이름"></div>
     <div class="form-field"><label for="profile-number">사업자등록번호 <span class="muted">(선택)</span></label><input id="profile-number" name="businessNumber" inputmode="numeric" maxlength="20" value="${esc(formatBusinessNumber(p.businessNumber||''))}" placeholder="000-00-00000"><span class="hint">예비창업자는 비워 두어도 됩니다.</span></div>
@@ -281,6 +439,7 @@ function historyView() {
 }
 function dataView() {
   const nts=health?.providers?.nts,ftc=health?.providers?.ftc;
+  const sync=accountStorageStatus();
   const rows=[
     {name:'국세청 · 사업자등록정보',description:'계속·휴업·폐업 상태, 과세유형, 입력 등록정보 진위 대조',url:'https://www.data.go.kr/data/15081808/openapi.do',value:nts?.configured?'연결 설정됨':health?'인증키 설정 필요':'서버 연결 확인 필요',tone:nts?.configured?'positive':'neutral'},
     {name:'공정거래위원회 · 통신판매업',description:'사업자번호가 정확히 일치하는 공개 등록정보',url:'https://www.data.go.kr/data/15126315/openapi.do',value:ftc?.configured?'연결 설정됨':health?'인증키 설정 필요':'서버 연결 확인 필요',tone:ftc?.configured?'positive':'neutral'},
@@ -289,6 +448,7 @@ function dataView() {
   return pageHeading('데이터는 투명하게, 판단은 정확하게','실제 연결 상태와 수집 결과, 데이터의 출처·기준일을 확인하세요.',`<div class="button-row"><button class="button" data-action="refresh-health">${icon('refresh')} 상태 새로고침</button></div>`)+`
   <div class="callout">${icon('info')}<span>API 설정 여부와 실제 조회 성공은 다릅니다. 개별 사업자 화면에는 <strong>조회 응답·출처·조회시각</strong>을 함께 표시합니다.</span></div>
   <div class="section-spacer source-list">${rows.map(r=>`<section class="card source-card"><div><h3>${r.name}</h3><p>${r.description}</p></div><div class="source-status"><span class="badge ${r.tone} dot">${r.value}</span>${external(r.url,'출처','button small')}</div></section>`).join('')}</div>
+  <section class="card source-card section-spacer"><div><h3>Firebase · 계정 보관</h3><p>${esc(sync.message)}</p>${authState.user&&cloudReady&&workspace.updatedAt?`<p>마지막 서버 확인 · ${esc(fmtTime(workspace.updatedAt))}</p>`:''}</div><div class="source-status"><span class="badge ${sync.tone} dot">${esc(sync.label)}</span><a class="button small" href="./#account" data-nav="account">계정 확인</a></div></section>
   <div class="content-grid section-spacer"><section class="card"><div class="card-header"><h2>지원사업 수집 결과</h2><span class="pill-label">실제 파일 기준</span></div><table class="status-table"><tbody>
     <tr><td>불러온 공고</td><td>${number(programs.length)}건</td></tr>
     <tr><td>마지막 성공</td><td>${esc(fmtTime(collection.lastSuccessAt||programMeta.collectedAt||programMeta.generatedAt||programMeta.lastSuccessfulAt))}</td></tr>
@@ -370,7 +530,7 @@ function validateModal() {
   openModal('등록정보 진위 대조',`<form id="validate-form"><p class="fine-print">사업자등록증의 개업일과 대표자명을 국세청 입력값과 대조합니다. 대표자 본인 인증이나 문서 원본 인증 기능은 아닙니다.</p><div class="form-grid" style="margin-top:17px"><div class="form-field full-span"><label>사업자등록번호</label><input readonly name="b_no" value="${formatBusinessNumber(ui.lookup.businessNumber)}"></div><div class="form-field"><label for="validation-date">개업일</label><input id="validation-date" name="start_dt" type="date" required></div><div class="form-field"><label for="validation-name">대표자명</label><input id="validation-name" name="p_nm" maxlength="100" required autocomplete="off"></div></div><p class="fine-print" style="margin-top:12px">확인 버튼을 누르면 입력값을 조회 서버를 통해 국세청으로 전달합니다. 대표자명·개업일은 이 앱의 거래처 기록에 저장하지 않습니다.</p><div id="validation-result" aria-live="polite"></div><div class="modal-actions"><button class="button" type="button" data-action="close-modal">닫기</button><button class="button primary" type="submit">입력정보 확인</button></div></form>`);
 }
 function privacyModal() {
-  openModal('개인정보와 보관 안내',`<div class="source-list"><div><h3>내 브라우저에 보관하는 정보</h3><p class="fine-print">거래처 목록, 메모, 입력 프로필, 확인 이력은 이 기기의 IndexedDB에 저장합니다. 로그인·다른 기기 동기화·팀 공유는 현재 제공하지 않습니다. 브라우저 데이터를 삭제하면 기록이 없어질 수 있으니 백업 파일을 보관하세요.</p></div><div><h3>조회할 때 전달하는 정보</h3><p class="fine-print">상태조회는 사업자번호, 진위 대조는 사용자가 입력한 번호·개업일·대표자명을 설정된 조회 서버와 해당 기관으로 전달합니다. 내 사업 매출·직원 수·거래 메모는 전송하지 않습니다.</p></div><div><h3>백업과 삭제</h3><p class="fine-print">거래처 관리에서 CSV 내보내기 또는 전체 JSON 백업을 할 수 있습니다. 개별 거래처 삭제 시 해당 거래처의 메모·확인 이력·변경 기록도 함께 삭제합니다. 백업에는 내부 메모가 포함되므로 필요한 사람에게만 전달하세요.</p></div><div><h3>공개정보의 해석</h3><p class="fine-print">사업자한눈은 독립적인 민간 서비스입니다. 정보의 기준일·출처를 확인하세요. 사업자 상태와 통신판매 신고는 거래 안전성이나 신용등급을 의미하지 않습니다.</p></div></div><div class="modal-actions"><button class="button primary" data-action="close-modal">확인</button></div>`);
+  openModal('개인정보와 보관 안내',`<div class="source-list"><div><h3>내 브라우저에 보관하는 정보</h3><p class="fine-print">거래처 목록, 메모, 입력 프로필, 확인 이력은 이 기기의 IndexedDB에 저장합니다. 로그인하면 Firebase UID별 Firestore 공간에 거래처·메모·프로필·조회 이력을 저장합니다. 비로그인 자료는 기기에 보관하고 명시적으로 가져올 때만 계정에 추가합니다. 팀 공동 작업은 제공하지 않습니다. 브라우저 데이터를 삭제하면 기록이 없어질 수 있으니 백업 파일을 보관하세요.</p></div><div><h3>조회할 때 전달하는 정보</h3><p class="fine-print">상태조회는 사업자번호, 진위 대조는 사용자가 입력한 번호·개업일·대표자명을 설정된 조회 서버와 해당 기관으로 전달합니다. 내 사업 매출·직원 수·거래 메모는 조회 기관에 전송하지 않습니다. 로그인 후 저장하는 업무 정보는 내 계정의 Firestore 공간으로 전달합니다.</p></div><div><h3>백업과 삭제</h3><p class="fine-print">거래처 관리에서 CSV 내보내기 또는 전체 JSON 백업을 할 수 있습니다. 개별 거래처 삭제 시 해당 거래처의 메모·확인 이력·변경 기록도 함께 삭제합니다. 백업에는 내부 메모가 포함되므로 필요한 사람에게만 전달하세요.</p></div><div><h3>공개정보의 해석</h3><p class="fine-print">사업자한눈은 독립적인 민간 서비스입니다. 정보의 기준일·출처를 확인하세요. 사업자 상태와 통신판매 신고는 거래 안전성이나 신용등급을 의미하지 않습니다.</p></div></div><div class="modal-actions"><button class="button primary" data-action="close-modal">확인</button></div>`);
 }
 function helpModal() {
   openModal('사업자한눈 이용 안내',`<div class="guide-step"><span class="step-number">01</span><div><h3>사업자번호 조회</h3><p>번호 10자리를 입력하면 연결된 국세청 API의 상태를 확인합니다. 제공되지 않은 상호·주소는 미확인으로 표시합니다.</p></div></div><div class="guide-step"><span class="step-number">02</span><div><h3>거래처 등록과 확인</h3><p>거래처를 직접 등록하거나 CSV로 가져오세요. 여러 업체의 상태를 한 번에 확인하고, 실제 성공 응답끼리 비교한 변경 기록을 볼 수 있습니다.</p></div></div><div class="guide-step"><span class="step-number">03</span><div><h3>지원사업 탐색</h3><p>내 사업 프로필을 저장한 뒤 지역·관심 분야가 관련된 공고를 살펴보세요. 자격조건·제외 대상·접수일정은 항상 원문에서 확인합니다.</p></div></div><div class="callout" style="margin-top:15px">${icon('info')}<span>조회가 연결 대기로 보이면 데이터 현황에서 운영 서버와 API 설정 상태를 확인하세요. 조회 없이 거래처 등록·메모·백업을 사용할 수 있습니다.</span></div><div class="modal-actions"><button class="button primary" data-action="close-modal">시작하기</button></div>`);
@@ -443,7 +603,8 @@ async function lookup(value) {
   }
 }
 async function batchCheck(ids) {
-  if(ui.batchBusy)return;
+  if(ui.batchBusy||authBusy()||accountTransition)return;
+  const epoch=accountEpoch;
   const targets=workspace.partners.filter(p=>ids.includes(p.id));
   if(!targets.length)return;
   ui.batchBusy=true;ui.batchTotal=targets.length;ui.batchDone=0;render();
@@ -456,9 +617,11 @@ async function batchCheck(ids) {
         const payload=await callApi('status',{businessNumbers:chunk.map(p=>p.businessNumber)},currentApiBase());
         results=chunk.map(p=>(Array.isArray(payload.results)?payload.results:[]).find(r=>r.businessNumber===p.businessNumber)||failureResult(p.businessNumber,new Error('응답에 이 사업자번호가 없어 확인하지 못했습니다.')));
       } catch(error){results=chunk.map(p=>failureResult(p.businessNumber,error));}
+      if(epoch!==accountEpoch)return;
       all.push(...results);
       const applied=applyCheckResults(workspace.partners,results);
       const saved=await persist({...workspace,partners:applied.partners,events:dedupeEvents(workspace.events,applied.events)});
+      if(epoch!==accountEpoch)return;
       ui.batchDone+=chunk.length;render();
       if(!saved)break;
       if(results.every(r=>r.outcome==='not_configured')) {
@@ -467,9 +630,10 @@ async function batchCheck(ids) {
       }
     }
     const check={id:crypto.randomUUID(),total:all.length,ok:all.filter(r=>r.outcome==='ok').length,failed:all.filter(r=>r.outcome!=='ok').length,checkedAt:new Date().toISOString()};
+    if(epoch!==accountEpoch)return;
     if(all.length)await persist({...workspace,checks:[check,...workspace.checks].slice(0,100)});
     toast(`${check.total}곳 확인 시도 · 응답 확인 ${check.ok}곳, 미확인/실패 ${check.failed}곳`,check.failed>0);
-  } finally {ui.batchBusy=false;render();}
+  } finally {if(epoch===accountEpoch){ui.batchBusy=false;render();}}
 }
 async function savePartner(form) {
   const data=new FormData(form);
@@ -523,8 +687,9 @@ async function validateRegistration(form) {
 
 document.addEventListener('submit',async event=>{
   const form=event.target;
-  if(!['lookup-form','partner-form','profile-form','connection-form','validate-form'].includes(form.id))return;
+  if(!['lookup-form','partner-form','profile-form','connection-form','validate-form','auth-email-form'].includes(form.id))return;
   event.preventDefault();
+  if(form.id==='auth-email-form'){await submitAuth(form);return;}
   if(form.id==='lookup-form')await lookup(String(new FormData(form).get('businessNumber')));
   if(form.id==='partner-form')await savePartner(form);
   if(form.id==='profile-form')await saveProfile(form);
@@ -532,7 +697,7 @@ document.addEventListener('submit',async event=>{
   if(form.id==='connection-form') {
     try {
       const base=validateApiBase(String(new FormData(form).get('apiBase')||''));
-      if(await persist({...workspace,preferences:{...workspace.preferences,apiBase:base}})){closeModal();await checkHealth();toast(health?'서버 연결 상태를 확인했습니다.':'서버 연결 상태를 확인해 주세요.',!health);}
+      guestWorkspace=await saveWorkspace({...guestWorkspace,preferences:{...guestWorkspace.preferences,apiBase:base}});workspace={...workspace,preferences:guestWorkspace.preferences};closeModal();await checkHealth();toast(health?'서버 연결 상태를 확인했습니다.':'서버 연결 상태를 확인해 주세요.',!health);
     } catch(error){document.getElementById('connection-error').textContent=error.message;}
   }
 });
@@ -591,6 +756,7 @@ document.addEventListener('click',async event=>{
   if(!element||element.disabled)return;
   const action=element.dataset.action;
   const id=element.dataset.id;
+  if(/^(auth-|cloud-|guest-import-)/.test(action)){await handleAccountAction(action,element);return;}
   if(action==='close-modal-backdrop'){if(event.target===element)closeModal();return;}
   if(action==='close-modal'){closeModal();return;}
   if(action==='toggle-menu'){ui.mobileMenu=!ui.mobileMenu;render();return;}
@@ -606,12 +772,12 @@ document.addEventListener('click',async event=>{
     if(await persist({...workspace,profile:{...workspace.profile,businessNumber:ui.lookup.businessNumber,name,providedBy:'user'}}))go('profile');
     return;
   }
-  if(action==='check-one'){closeModal();await batchCheck([id]);detailModal(byId(id));return;}
+  if(action==='check-one'){const epoch=accountEpoch;closeModal();await batchCheck([id]);if(epoch===accountEpoch&&byId(id))detailModal(byId(id));return;}
   if(action==='batch-check'){await batchCheck(element.dataset.scope==='selected'?[...selected]:workspace.partners.map(p=>p.id));return;}
   if(action==='deselect'){selected.clear();render();return;}
   if(action==='delete-confirm'){
     const p=byId(id);if(!p)return;
-    openModal('거래처 삭제',`<p style="font-size:13px"><strong>${esc(p.name||formatBusinessNumber(p.businessNumber))}</strong>의 메모, 확인 이력과 변경 기록을 이 브라우저에서 삭제합니다.</p><div class="modal-actions"><button class="button" data-action="close-modal">취소</button><button class="button danger" data-action="delete-partner" data-id="${esc(id)}">삭제</button></div>`);return;
+    openModal('거래처 삭제',`<p style="font-size:13px"><strong>${esc(p.name||formatBusinessNumber(p.businessNumber))}</strong>의 메모, 확인 이력과 변경 기록을 현재 ${authState.user?'계정':'기기'} 자료에서 삭제합니다.</p><div class="modal-actions"><button class="button" data-action="close-modal">취소</button><button class="button danger" data-action="delete-partner" data-id="${esc(id)}">삭제</button></div>`);return;
   }
   if(action==='delete-partner'){
     if(await persist({...workspace,partners:workspace.partners.filter(p=>p.id!==id),events:workspace.events.filter(e=>e.partnerId!==id)})){selected.delete(id);closeModal();toast('거래처와 관련 기록을 삭제했습니다.');}return;
@@ -663,9 +829,10 @@ window.addEventListener('hashchange',()=>{
   if(titles[view]){ui.view=view;ui.mobileMenu=false;if(modal)closeModal();render();}
 });
 
-try {workspace=await loadWorkspace();}
+try {workspace=await loadWorkspace();guestWorkspace=structuredClone(workspace);}
 catch(error){storageError='이 브라우저에서 기록을 불러오지 못했습니다. 저장 기능을 사용하려면 브라우저 저장소 설정을 확인해 주세요.';}
 if(!titles[ui.view])ui.view='lookup';
 render();
-Promise.allSettled([checkHealth(),refreshPrograms()]);
+authClient=createAuthClient({apiBase:window.BIZHANNUN_CONFIG?.apiBase||'',onStateChange:receiveAuthState});
+Promise.allSettled([checkHealth(),refreshPrograms(),authClient.init()]);
 

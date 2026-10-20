@@ -8,3 +8,6 @@ coverage/
 playwright-report/
 test-results/
 .DS_Store
+src/firebase-sdk.mjs
+.firebase/
+*-debug.log

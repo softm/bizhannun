@@ -1,6 +1,6 @@
 # 사업자한눈
 
-사업자등록번호 조회, 거래처 확인 기록, 지원사업 탐색을 한 화면에서 사용하는 웹 앱입니다. 공개정보의 출처와 확인 시점을 표시하고, 확인하지 못한 결과와 실제 사업자 상태를 구분합니다.
+사업자등록번호 조회, 거래처 확인 기록, 지원사업 탐색을 한 화면에서 사용하는 웹 앱입니다. v0.2에서는 Firebase 로그인과 계정별 Firestore 정보 보관을 연결합니다. 공개정보의 출처와 확인 시점을 표시하고, 확인하지 못한 결과와 실제 사업자 상태를 구분합니다.
 
 - 실행: [사업자한눈](https://softm.github.io/bizhannun/)
 - 데이터 현황: [data-status.html](https://softm.github.io/bizhannun/data-status.html)
@@ -8,6 +8,8 @@
 - 저장소: [softm/bizhannun](https://github.com/softm/bizhannun)
 - 운영·배포·장애 대응: [docs/OPERATIONS.md](docs/OPERATIONS.md)
 - 구현·배포 검증과 화면 기록: [docs/VERIFICATION.md](docs/VERIFICATION.md)
+- 로그인·Firestore·국세청 키 연결: [docs/AUTH_SETUP.md](docs/AUTH_SETUP.md)
+- 카카오·네이버 앱 등록과 서버 설정: [docs/SOCIAL_AUTH.md](docs/SOCIAL_AUTH.md)
 - 초기 제품 기획: [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md). 구현 완료 목록이 아닌 확장 방향을 담은 기획 문서입니다.
 
 ## 구현 범위
@@ -17,19 +19,21 @@
 | 사업자 상태 조회 | 계속·휴업·폐업 등 국세청 응답, 과세유형, 확인 시점 | 서버에 국세청 API 인증키 필요. 사업자번호만으로 상호·대표자·주소를 역조회하지 않습니다. |
 | 등록정보 진위 대조 | 사업자번호·개업일·대표자명 등 입력값 대조 | 국세청 API 연결 필요. 대표자 본인 인증이나 문서 원본 인증이 아닙니다. |
 | 통신판매 신고정보 | 사업자번호가 정확히 일치하는 공개 신고정보 | 서버에 공정위 API 인증키 필요. 통신판매 신고 데이터의 수록 범위에 한정됩니다. |
-| 거래처 관리 | 직접 등록, CSV 가져오기·내보내기, 태그·메모, 일괄 상태 확인 | 같은 브라우저와 사이트 주소의 IndexedDB에 저장합니다. 로그인·공동 작업·서버 동기화가 없습니다. |
+| 로그인·계정 보관 | 구글·이메일 로그인, 카카오·네이버 서버 OAuth, UID별 정보 보관 | 카카오·네이버는 개발자 앱 인증값과 Firebase Admin 설정 필요. 같은 제공자의 같은 계정을 사용합니다. |
+| 거래처 관리 | 직접 등록, CSV 가져오기·내보내기, 태그·메모, 일괄 상태 확인 | 로그인 계정은 Firestore에 저장하고, 비로그인 자료는 기기의 IndexedDB에 따로 보관합니다. |
 | 변경 기록 | 동일 사업자·동일 출처의 성공 응답 사이에서 확인된 상태 변화 | 최초 확인은 기준점입니다. 미조회·오류·미설정 결과로 폐업이나 상태 변화를 만들지 않습니다. |
 | 지원사업 탐색 | 수집한 공개 목록 검색, 입력한 사업 프로필과 관련 조건 표시, 공식 원문 링크 | 자격 충족·선정·수급 가능성을 판정하지 않습니다. 지역·분야 등 공개 목록에 있는 정보만 사용합니다. |
 | 데이터 현황 | 출처, 수집 시도와 성공 시점, 제공 범위, API 설정 상태 | 연결 상태는 인증키 존재 여부와 서버 응답을 보여 줍니다. 인증키 유효성이나 원천 데이터의 완전성을 보증하지 않습니다. |
-| 백업·복원 | 이 브라우저의 거래처·프로필·확인 기록을 JSON으로 내보내고 복원 | 다른 기기나 도메인으로 옮길 때 사용합니다. 복원은 미리 확인한 백업으로 현재 내용을 교체합니다. |
+| 백업·복원·이전 | 현재 공간의 거래처·프로필·확인 기록을 JSON으로 내보내고 복원, 기기 자료를 계정으로 가져오기 | 계정 이전은 사용자가 명시적으로 실행합니다. 중복 사업자번호는 계정 기록을 유지하며 기기의 원본은 보존합니다. |
 
 신용등급, 거래 안전 점수, 체납·계좌·민원 이력, 비공개 매출을 제공하지 않습니다. DART·국민연금·조달·인허가 등은 현재 실시간 조회 구현 범위에 포함되지 않습니다. 지원사업 데이터는 수집된 출처와 범위를 화면에 표시하며 모든 공고를 망라한다고 주장하지 않습니다.
 
 ## 로컬 실행
 
-Node.js 22 이상이 필요합니다. 별도 npm 패키지 의존성은 없습니다.
+Node.js 22 이상이 필요합니다. Firebase 웹 SDK·Admin SDK와 빌드 의존성을 설치합니다.
 
 ```bash
+npm ci
 npm start
 ```
 
@@ -53,11 +57,12 @@ PORT=4173
 ```bash
 npm run check   # JS 구문, JSON, 필수 공개 파일 검사
 npm test        # 도메인·API·수집 및 매칭 동작 테스트
+npm run test:rules # Firestore 보안 규칙 에뮬레이터 검사
 npm run collect # 공개 지원사업 데이터 갱신
 npm run build   # 공개 파일만 dist/에 생성
 ```
 
-`npm run build`는 HTML·CSS·브라우저 모듈·이미지·공개 JSON만 복사합니다. `server/`, `api/`, `scripts/`, `tests/`, `docs/`, 인증키 파일은 `dist/`에 들어가지 않습니다. 개발 서버도 같은 공개 경로만 제공합니다.
+`npm run build`는 Firebase 웹 SDK를 포함한 브라우저 코드를 번들하고 공개 HTML·CSS·이미지·JSON을 `dist/`에 생성합니다. `server/`, `api/`, `scripts/`, `tests/`, `docs/`, 서버 인증키 파일은 정적 산출물에 들어가지 않습니다. 개발 서버도 허용한 공개 경로만 제공합니다.
 
 테스트는 입력 검증, 실패 응답 처리, 변경 기록, 수집 데이터 보존 등 동작을 검증합니다. 테스트 통과나 `/api/health`의 `configured: true`를 실제 인증키로 원천 기관 조회까지 성공했다는 뜻으로 해석하면 안 됩니다. 실제 연동 여부는 운영 환경에서 활용 승인·인증키·응답을 별도로 확인합니다.
 
@@ -80,9 +85,11 @@ Pages는 화면과 공개 지원사업 JSON을 제공합니다. 공공데이터 
 
 ### Vercel
 
-Vercel 배포는 정적 화면과 명시적 `/api/health`, `/api/status`, `/api/validate`, `/api/commerce` 함수를 함께 제공합니다. 같은 배포 주소에서 화면을 열면 `BIZ_API_BASE`를 비워 두어도 같은 origin의 API를 사용합니다.
+Vercel 배포는 정적 화면과 `/api/health`, `/api/status`, `/api/validate`, `/api/commerce`, `/api/config`, `/api/auth` 함수를 함께 제공합니다. 같은 배포 주소에서 화면을 열면 `BIZ_API_BASE`를 비워 두어도 같은 origin의 API를 사용합니다.
 
 **배포 상태:** 2026-10-20에 Node.js 24 환경으로 초기 운영 배포를 완료했습니다. [운영 API 상태](https://bizhannun.vercel.app/api/health)의 익명 접근, Pages origin의 CORS, 정상 형식·오류 형식의 요청을 검증했습니다. `NTS_SERVICE_KEY`와 `FTC_SERVICE_KEY`는 미설정이며 실제 기관 인증 조회는 아직 수행하지 않았습니다. 소스 파일을 [Vercel 배포 API](https://vercel.com/docs/rest-api/deployments/create-a-new-deployment)에 직접 전달했습니다. Vercel GitHub App이 설치되지 않아 Git push에 따른 Vercel 자동 배포는 연결되어 있지 않습니다.
+
+v0.2의 Firebase 프로젝트 `biz-hannun`, 웹 앱 `bizhannun-web`, Enterprise Native 데이터베이스 `bizhannun`을 생성했습니다. 데이터베이스 위치는 `asia-northeast3`이며 실시간 기능을 활성화했습니다. Google·이메일/비밀번호 제공자 활성화, 승인 도메인 등록, 제공자별 계정 분리 설정과 보안 규칙 게시를 Console에서 확인했습니다. 운영 배포와 실제 계정 로그인·자료 저장 검증은 [검증 기록](docs/VERIFICATION.md)에서 별도로 추적합니다.
 
 1. 검증한 UI·API·서버 모듈·빌드 스크립트·공개 JSON과 `package.json`, `vercel.json`을 기존 Vercel 프로젝트에 직접 배포합니다. `vercel.json`의 빌드 명령은 `npm run build`, 출력 디렉터리는 `dist`입니다. `.env.local` 등 인증키 파일은 전송하지 않습니다.
 2. 프로젝트 환경변수에 필요한 `NTS_SERVICE_KEY`, `FTC_SERVICE_KEY`, `ALLOWED_ORIGINS`를 설정합니다. 공개 Pages 화면에서 호출하려면 `https://softm.github.io` 또는 실제 운영 origin을 허용합니다.
@@ -95,9 +102,11 @@ Vercel 배포는 정적 화면과 명시적 `/api/health`, `/api/status`, `/api/
 
 ## 데이터 저장과 해석
 
-거래처·태그·메모·프로필·확인 기록은 현재 브라우저의 IndexedDB에 저장됩니다. 브라우저 데이터를 지우거나 다른 기기·브라우저·사이트 주소를 사용하면 같은 데이터가 자동으로 나타나지 않습니다. 필요한 기록은 앱에서 JSON 백업으로 보관하세요. 백업에는 직접 입력한 업무 정보가 포함될 수 있으므로 공개 저장소에 올리지 마세요.
+로그인 계정의 거래처·태그·메모·프로필·확인 기록은 Firebase UID별 Firestore 공간에 저장합니다. 다른 기기에서도 같은 로그인 제공자의 같은 계정을 사용하면 같은 자료를 읽습니다. 저장 완료는 서버 확인 후 표시하며, 다른 기기의 변경과 충돌하면 최신 기록을 다시 불러오도록 안내합니다. 다른 SNS 계정을 이메일만으로 자동 병합하지 않습니다.
 
-조회할 때는 입력한 사업자번호가 설정한 API 서버와 해당 제공기관에 전달됩니다. 등록정보 진위 대조는 별도로 입력한 개업일·대표자명을 국세청으로 전달하지만 거래처 기록에 저장하지 않습니다. 공개 지원사업 매칭에 사용하는 프로필은 브라우저 안에서 처리합니다.
+비로그인 상태의 자료는 기존처럼 해당 브라우저·origin의 IndexedDB에 보관합니다. 로그인만으로 기기 자료를 계정에 올리지 않고 명시적인 가져오기 기능을 사용합니다. 기기의 원본을 유지하고 중복 사업자번호는 계정의 기록을 우선합니다. 백업에는 직접 입력한 업무 정보가 포함될 수 있으므로 공개 저장소에 올리지 않습니다. 팀 공동 작업은 현재 범위에 포함되지 않습니다.
+
+조회할 때는 입력한 사업자번호가 설정한 API 서버와 해당 제공기관에 전달됩니다. 등록정보 진위 대조는 별도로 입력한 개업일·대표자명을 국세청으로 전달하지만 거래처 기록에 저장하지 않습니다. 공개 지원사업 조건 비교는 브라우저에서 처리하며, 로그인 계정의 사업 프로필은 계정 자료와 함께 Firestore에 보관합니다.
 
 변경 기록은 사용자가 상태 확인을 실행했을 때 발생합니다. 브라우저가 닫힌 동안 거래처를 자동으로 감시하거나 이메일·메신저로 알림을 보내는 기능은 없습니다. 계속사업자라는 응답은 세무 등록 상태에 관한 사실이며 거래 안전성·지급능력을 뜻하지 않습니다. 미조회와 통신 오류 역시 폐업의 근거가 아닙니다.
 
@@ -112,5 +121,7 @@ CSV 가져오기는 한 번에 최대 1,000개 데이터 행을 받으며 초과
 - [GitHub Actions 예약 이벤트](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
 - [Vercel Node.js Functions](https://vercel.com/docs/functions/runtimes/node-js)
 - [Vercel 프로젝트 설정](https://vercel.com/docs/project-configuration)
+- [Firebase Authentication](https://firebase.google.com/docs/auth)
+- [Firestore 보안 규칙](https://firebase.google.com/docs/firestore/security/get-started)
 
 표시 내용이 원문과 다르거나 공고가 수정된 경우에는 해당 기관의 최신 원문을 확인합니다. 공개 목록의 이름·주소 유사성만으로 서로 다른 사업자를 같은 업체로 합치지 않습니다.

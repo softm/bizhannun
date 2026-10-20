@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Data model (all paths private to the Firebase uid):
+    // users/{uid}/bizhannunWorkspace/main: ownerUid, format/schemaVersion=1,
+    // revision>=1, generation(32 hex), manifestParts/Bytes/Digest, bounded
+    // partner/event/check counts, updatedAt server timestamp.
+    // users/{uid}/bizhannunObjects/{32hex}-{part}: immutable JSON fragments of
+    // one partner/event/check/profile. Each body <=180,000 UTF-8 bytes in client
+    // and <=180,000 characters here (Firestore's own 1MiB cap also applies).
+    // users/{uid}/bizhannunManifests/{32hex}-{part}: immutable JSON descriptors
+    // referencing only objects under this uid. App verifies every SHA-256,
+    // descriptor and nested domain object when loading and before saving.
+    // JSON fragments have no authorization fields: only path uid grants access.
+    function isAuthenticated() { return request.auth != null; }
+    function isOwner(uid) { return isAuthenticated() && request.auth.uid == uid; }
+    function validUid(uid) { return uid is string && uid.size() > 0 && uid.size() <= 128; }
+    function validId(value) { return value is string && value.matches('^[a-f0-9]{32}$'); }
+    function validDigest(value) { return value is string && value.matches('^[a-f0-9]{64}$'); }
+    function validInteger(value, minimum, maximum) { return value is int && value >= minimum && value <= maximum; }
+    function uidUnchanged(data, uid) { return validUid(data.ownerUid) && data.ownerUid == uid; }
+    function uidNotModified(data) { return data.ownerUid == resource.data.ownerUid; }
+    function isValidHead(data, uid) {
+      return data.keys().hasAll(['ownerUid', 'format', 'schemaVersion', 'revision', 'generation', 'manifestParts', 'manifestBytes', 'manifestDigest', 'partnerCount', 'eventCount', 'checkCount', 'updatedAt'])
+        && data.keys().hasOnly(['ownerUid', 'format', 'schemaVersion', 'revision', 'generation', 'manifestParts', 'manifestBytes', 'manifestDigest', 'partnerCount', 'eventCount', 'checkCount', 'updatedAt'])
+        && uidUnchanged(data, uid) && data.format == 1 && data.schemaVersion == 1
+        && validInteger(data.revision, 1, 9007199254740991)
+        && validId(data.generation) && validDigest(data.manifestDigest)
+        && validInteger(data.manifestParts, 1, 32) && validInteger(data.manifestBytes, 1, 5760000)
+        && validInteger(data.partnerCount, 0, 1000) && validInteger(data.eventCount, 0, 1000) && validInteger(data.checkCount, 0, 100)
+        && data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+    function stagedManifestExists(data, uid) {
+      let first = get(/databases/$(database)/documents/users/$(uid)/bizhannunManifests/$(data.generation + '-0'));
+      return first.data.ownerUid == uid && first.data.kind == 'manifest'
+        && first.data.objectId == data.generation && first.data.parts == data.manifestParts;
+    }
+    function isValidFragment(data, uid, id, manifest) {
+      return data.keys().hasAll(['ownerUid', 'format', 'kind', 'objectId', 'part', 'parts', 'body', 'createdAt'])
+        && data.keys().hasOnly(['ownerUid', 'format', 'kind', 'objectId', 'part', 'parts', 'body', 'createdAt'])
+        && uidUnchanged(data, uid) && data.format == 1 && validId(data.objectId)
+        && id == data.objectId + '-' + string(data.part)
+        && validInteger(data.parts, 1, manifest ? 32 : 512)
+        && validInteger(data.part, 0, data.parts - 1)
+        && data.kind is string && data.kind.size() <= 8
+        && (manifest ? data.kind == 'manifest' : data.kind in ['partner', 'event', 'check', 'profile'])
+        && data.body is string && data.body.size() > 0 && data.body.size() <= 180000
+        && data.createdAt is timestamp && data.createdAt == request.time;
+    }
+    match /users/{uid}/bizhannunWorkspace/{id} {
+      allow read: if isOwner(uid) && id == 'main';
+      allow create: if isOwner(uid) && id == 'main' && isValidHead(request.resource.data, uid)
+        && request.resource.data.revision == 1 && stagedManifestExists(request.resource.data, uid);
+      allow update: if isOwner(uid) && id == 'main' && isValidHead(request.resource.data, uid)
+        && uidNotModified(request.resource.data)
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.generation != resource.data.generation
+        && stagedManifestExists(request.resource.data, uid);
+      allow delete: if false;
+    }
+    match /users/{uid}/bizhannunObjects/{id} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid) && isValidFragment(request.resource.data, uid, id, false);
+      // Published records are immutable. A changed record receives a fresh ID.
+      allow update: if false;
+      allow delete: if isOwner(uid) && id.matches('^[a-f0-9]{32}-[0-9]{1,3}$');
+    }
+    match /users/{uid}/bizhannunManifests/{id} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid) && isValidFragment(request.resource.data, uid, id, true);
+      allow update: if false;
+      allow delete: if isOwner(uid) && id.matches('^[a-f0-9]{32}-[0-9]{1,2}$');
+    }
+    // No public profiles, user directory, collection-group access or wildcard writes.
+    match /{document=**} { allow read, write: if false; }
+  }
+}

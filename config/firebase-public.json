@@ -1,0 +1,15 @@
+{
+  "firebase": {
+    "apiKey": "AIzaSyA8qtaLl3oKnoioi2CwwjBmAwOZwYAGzTk",
+    "authDomain": "biz-hannun.firebaseapp.com",
+    "projectId": "biz-hannun",
+    "storageBucket": "biz-hannun.firebasestorage.app",
+    "messagingSenderId": "1004527555832",
+    "appId": "1:1004527555832:web:6bc474c07ed7fe25a9570d"
+  },
+  "providers": {
+    "google": { "configured": true },
+    "email": { "configured": true }
+  },
+  "firestore": { "databaseId": "bizhannun", "edition": "ENTERPRISE" }
+}

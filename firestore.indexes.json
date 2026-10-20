@@ -1,0 +1,8 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    { "collectionGroup": "bizhannunObjects", "fieldPath": "*", "indexes": [] },
+    { "collectionGroup": "bizhannunManifests", "fieldPath": "*", "indexes": [] },
+    { "collectionGroup": "bizhannunWorkspace", "fieldPath": "*", "indexes": [] }
+  ]
+}

@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { handleApi } from '../api/index.mjs';
+import { handlePublicConfig } from './config.mjs';
+import { handleSocialAuth } from './social-auth.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const ROOT_FILES = new Set([
@@ -71,7 +73,12 @@ async function serveApi(request, response, pathname, env, fetchImpl) {
     options.body = Readable.toWeb(request);
     options.duplex = 'half';
   }
-  const result = await handleApi(new Request(url, options), env, fetchImpl);
+  const webRequest = new Request(url, options);
+  const result = pathname === '/api/config'
+    ? await handlePublicConfig(webRequest, env)
+    : pathname === '/api/auth'
+      ? await handleSocialAuth(webRequest, env, { fetchImpl })
+      : await handleApi(webRequest, env, fetchImpl);
   response.writeHead(result.status, Object.fromEntries(result.headers));
   if (!result.body || request.method === 'HEAD') response.end();
   else await pipeline(Readable.fromWeb(result.body), response);

@@ -1,6 +1,6 @@
 {
   "name": "bizhannun",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "사업자한눈 — 사업자 조회, 거래처 확인 기록과 지원사업 탐색",
@@ -11,6 +11,13 @@
     "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.mjs",
     "check": "node scripts/check.mjs",
-    "collect": "node scripts/collect-programs.mjs"
-  }
+    "collect": "node scripts/collect-programs.mjs",
+    "prestart": "node scripts/bundle-sdk.mjs",
+    "predev": "node scripts/bundle-sdk.mjs",
+    "prebuild": "node scripts/bundle-sdk.mjs",
+    "precheck": "node scripts/bundle-sdk.mjs",
+    "test:rules": "npx -y firebase-tools@15.34.0 emulators:exec --only firestore --project demo-bizhannun \"node --test tests/firestore-rules.test.mjs\""
+  },
+  "dependencies": { "firebase": "13.0.0", "firebase-admin": "14.5.0" },
+  "devDependencies": { "esbuild": "0.28.2", "@firebase/rules-unit-testing": "6.0.0" }
 }

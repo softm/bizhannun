@@ -1,0 +1,3 @@
+export { initializeApp, getApps, getApp } from 'firebase/app';
+export { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithCustomToken, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail, signOut, setPersistence, browserLocalPersistence, connectAuthEmulator } from 'firebase/auth';
+export { getFirestore, doc, getDocFromServer, getDoc, setDoc, deleteDoc, writeBatch, runTransaction, serverTimestamp, onSnapshot, connectFirestoreEmulator, collection, getDocs, initializeFirestore, memoryLocalCache } from 'firebase/firestore';

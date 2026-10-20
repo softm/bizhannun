@@ -38,7 +38,10 @@ jobs:
       - name: Synchronize before validation
         run: git pull --ff-only origin main
 
-      - name: Check source and data syntax
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate source and data syntax
         run: npm run check
 
       - name: Test behavior
