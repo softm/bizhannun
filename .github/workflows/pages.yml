@@ -1,0 +1,103 @@
+name: Collect public data and deploy Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # UTC 21:17 = Asia/Seoul 06:17 on the following day.
+    - cron: '17 21 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Check out reviewed main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Synchronize before validation
+        run: git pull --ff-only origin main
+
+      - name: Check source and data syntax
+        run: npm run check
+
+      - name: Test behavior
+        run: npm test
+
+      - name: Refresh public support program data
+        # Expected upstream failures are recorded by the collector while the
+        # last successful snapshot stays intact. A broken collector still fails.
+        run: npm run collect
+
+      - name: Persist snapshots and collection status
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+            echo "main changed during validation. Stop without merging or overwriting; run again against the new main."
+            exit 1
+          fi
+          git add -- 'data/*.json'
+          if git diff --cached --quiet; then
+            echo "Public data is unchanged."
+            exit 0
+          fi
+          while IFS= read -r path; do
+            if [[ ! "$path" =~ ^data/[^/]+\.json$ ]]; then
+              echo "Refusing to commit a file outside the public data allowlist."
+              exit 1
+            fi
+          done < <(git diff --cached --name-only)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(data): refresh public support program snapshots"
+          # A concurrent push is rejected normally. Never rebase or force-push
+          # code that has not passed this run's tests.
+          git push origin HEAD:main
+
+      - name: Build public website
+        env:
+          # This repository variable is a public origin, never an API key.
+          BIZ_API_BASE: ${{ vars.BIZ_API_BASE }}
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

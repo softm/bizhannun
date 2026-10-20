@@ -1,0 +1,113 @@
+# 사업자한눈
+
+사업자등록번호 조회, 거래처 확인 기록, 지원사업 탐색을 한 화면에서 사용하는 웹 앱입니다. 공개정보의 출처와 확인 시점을 표시하고, 확인하지 못한 결과와 실제 사업자 상태를 구분합니다.
+
+- 프런트엔드 배포 대상: [GitHub Pages](https://softm.github.io/bizhannun/)
+- 저장소: [softm/bizhannun](https://github.com/softm/bizhannun)
+- 운영·배포·장애 대응: [docs/OPERATIONS.md](docs/OPERATIONS.md)
+- 초기 제품 기획: [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md). 구현 완료 목록이 아닌 확장 방향을 담은 기획 문서입니다.
+
+## 구현 범위
+
+| 기능 | 제공하는 내용 | 연결 조건과 한계 |
+| --- | --- | --- |
+| 사업자 상태 조회 | 계속·휴업·폐업 등 국세청 응답, 과세유형, 확인 시점 | 서버에 국세청 API 인증키 필요. 사업자번호만으로 상호·대표자·주소를 역조회하지 않습니다. |
+| 등록정보 진위 대조 | 사업자번호·개업일·대표자명 등 입력값 대조 | 국세청 API 연결 필요. 대표자 본인 인증이나 문서 원본 인증이 아닙니다. |
+| 통신판매 신고정보 | 사업자번호가 정확히 일치하는 공개 신고정보 | 서버에 공정위 API 인증키 필요. 통신판매 신고 데이터의 수록 범위에 한정됩니다. |
+| 거래처 관리 | 직접 등록, CSV 가져오기·내보내기, 태그·메모, 일괄 상태 확인 | 같은 브라우저와 사이트 주소의 IndexedDB에 저장합니다. 로그인·공동 작업·서버 동기화가 없습니다. |
+| 변경 기록 | 동일 사업자·동일 출처의 성공 응답 사이에서 확인된 상태 변화 | 최초 확인은 기준점입니다. 미조회·오류·미설정 결과로 폐업이나 상태 변화를 만들지 않습니다. |
+| 지원사업 탐색 | 수집한 공개 목록 검색, 입력한 사업 프로필과 관련 조건 표시, 공식 원문 링크 | 자격 충족·선정·수급 가능성을 판정하지 않습니다. 지역·분야 등 공개 목록에 있는 정보만 사용합니다. |
+| 데이터 현황 | 출처, 수집 시도와 성공 시점, 제공 범위, API 설정 상태 | 연결 상태는 인증키 존재 여부와 서버 응답을 보여 줍니다. 인증키 유효성이나 원천 데이터의 완전성을 보증하지 않습니다. |
+| 백업·복원 | 이 브라우저의 거래처·프로필·확인 기록을 JSON으로 내보내고 복원 | 다른 기기나 도메인으로 옮길 때 사용합니다. 복원은 미리 확인한 백업으로 현재 내용을 교체합니다. |
+
+신용등급, 거래 안전 점수, 체납·계좌·민원 이력, 비공개 매출을 제공하지 않습니다. DART·국민연금·조달·인허가 등은 현재 실시간 조회 구현 범위에 포함되지 않습니다. 지원사업 데이터는 수집된 출처와 범위를 화면에 표시하며 모든 공고를 망라한다고 주장하지 않습니다.
+
+## 로컬 실행
+
+Node.js 22 이상이 필요합니다. 별도 npm 패키지 의존성은 없습니다.
+
+```bash
+npm start
+```
+
+브라우저에서 `http://127.0.0.1:4173/`를 엽니다. GitHub Pages의 하위 경로를 확인하려면 `http://127.0.0.1:4173/bizhannun/`도 사용할 수 있습니다. 개발 서버는 `127.0.0.1`에만 바인딩합니다.
+
+실제 공공 API를 연결하려면 `.env.example`을 참고해 로컬 환경변수 또는 `.env.local`에 서버 인증키를 설정합니다.
+
+```dotenv
+NTS_SERVICE_KEY=국세청_활용승인_인증키
+FTC_SERVICE_KEY=공정위_활용승인_인증키
+ALLOWED_ORIGINS=https://softm.github.io,http://127.0.0.1:4173
+PORT=4173
+```
+
+`DATA_GO_KR_SERVICE_KEY`는 `NTS_SERVICE_KEY`가 없을 때만 국세청 키로 사용됩니다. 공정위 키에는 별도 `FTC_SERVICE_KEY`를 사용합니다. 인증키를 `app-config.js`, 브라우저 입력창, CSV, 공개 저장소에 넣지 마세요. `.env.local`은 Git 추적 및 정적 빌드 대상에서 제외됩니다.
+
+인증키 없이도 거래처 등록·태그·메모·백업과 공개 지원사업 탐색을 사용할 수 있습니다. 실제 조회가 준비되지 않은 경우 앱은 연결 대기 또는 설정 필요 상태를 표시합니다. 예시 업체나 가상의 성공 응답으로 대체하지 않습니다.
+
+## 개발 명령
+
+```bash
+npm run check   # JS 구문, JSON, 필수 공개 파일 검사
+npm test        # 도메인·API·수집 및 매칭 동작 테스트
+npm run collect # 공개 지원사업 데이터 갱신
+npm run build   # 공개 파일만 dist/에 생성
+```
+
+`npm run build`는 HTML·CSS·브라우저 모듈·이미지·공개 JSON만 복사합니다. `server/`, `api/`, `scripts/`, `tests/`, `docs/`, 인증키 파일은 `dist/`에 들어가지 않습니다. 개발 서버도 같은 공개 경로만 제공합니다.
+
+테스트는 입력 검증, 실패 응답 처리, 변경 기록, 수집 데이터 보존 등 동작을 검증합니다. 테스트 통과나 `/api/health`의 `configured: true`를 실제 인증키로 원천 기관 조회까지 성공했다는 뜻으로 해석하면 안 됩니다. 실제 연동 여부는 운영 환경에서 활용 승인·인증키·응답을 별도로 확인합니다.
+
+## 배포 구조
+
+### GitHub Pages
+
+Pages는 화면과 공개 지원사업 JSON을 제공합니다. 공공데이터 인증키를 보관하거나 `/api/*` 서버를 실행할 수 없습니다. 실제 사업자 조회에는 별도 API 서버가 필요합니다.
+
+1. 저장소의 **Settings → Pages → Build and deployment**에서 Source를 **GitHub Actions**로 설정합니다.
+2. **Settings → Actions → General → Workflow permissions**에서 워크플로가 공개 데이터 JSON을 저장소에 기록할 수 있도록 권한을 설정합니다. 브랜치 보호 정책도 해당 기록 방식과 맞아야 합니다.
+3. 별도 API 서버를 연결할 때 **Settings → Secrets and variables → Actions → Variables**에 `BIZ_API_BASE`를 서버의 HTTPS origin으로 설정합니다. 예: `https://your-project.vercel.app`. `/api`, 경로, 쿼리, 인증정보는 포함하지 않습니다.
+4. `main` push 또는 Actions의 **Collect public data and deploy Pages → Run workflow**로 배포합니다.
+
+공개 API 주소는 브라우저에 전달되는 설정값입니다. `BIZ_API_BASE`에 공공데이터 인증키를 넣으면 안 됩니다. 앱의 조회 서버 연결 화면에서도 브라우저별 서버 주소를 지정할 수 있습니다.
+
+빌드의 `BIZ_API_BASE`가 미설정이거나 공백이면 원본 `app-config.js`의 설정을 유지합니다. 비어 있는 저장소 variable이 원본 주소를 지우지 않습니다.
+
+워크플로는 매일 UTC 21:17, 한국 시간 다음 날 06:17에도 실행되도록 정의되어 있습니다. 예약 실행의 실제 시작 시각은 GitHub Actions의 실행 대기와 정책에 영향을 받습니다. 수집 실패 시 이전 성공 데이터를 보존하고 실패 상태를 기록합니다. `data/*.json`의 변경만 `GITHUB_TOKEN`으로 `main`에 커밋하므로 다음 실행에서도 마지막 성공본이 남습니다. 실행 도중 `main`이 바뀌거나 push가 거절되면 강제 병합·강제 push 없이 멈춥니다.
+
+### Vercel
+
+Vercel 배포는 정적 화면과 명시적 `/api/health`, `/api/status`, `/api/validate`, `/api/commerce` 함수를 함께 제공합니다. 같은 배포 주소에서 화면을 열면 `BIZ_API_BASE`를 비워 두어도 같은 origin의 API를 사용합니다.
+
+**초기 연결 상태:** `bizhannun` Vercel 프로젝트는 Node.js 24 환경으로 준비되어 있습니다. 해당 GitHub 저장소에 필요한 Vercel GitHub App 설치가 없어 Git 저장소 연결은 완료되지 않았습니다. 초기 배포는 검증한 소스 파일을 [Vercel 배포 API](https://vercel.com/docs/rest-api/deployments/create-a-new-deployment)에 직접 전달하는 방식으로 진행할 예정입니다. Git push에 따른 Vercel 자동 배포는 현재 연결되어 있지 않습니다.
+
+1. 검증한 UI·API·서버 모듈·빌드 스크립트·공개 JSON과 `package.json`, `vercel.json`을 기존 Vercel 프로젝트에 직접 배포합니다. `vercel.json`의 빌드 명령은 `npm run build`, 출력 디렉터리는 `dist`입니다. `.env.local` 등 인증키 파일은 전송하지 않습니다.
+2. 프로젝트 환경변수에 필요한 `NTS_SERVICE_KEY`, `FTC_SERVICE_KEY`, `ALLOWED_ORIGINS`를 설정합니다. 공개 Pages 화면에서 호출하려면 `https://softm.github.io` 또는 실제 운영 origin을 허용합니다.
+3. 배포가 준비되면 프로젝트의 **Production 도메인**에서 `/api/health`를 익명으로 확인하고, 실제로 조회 권한이 있는 사업자 입력으로 원천 연결을 확인합니다. 키 변경 후에는 해당 환경의 새 배포가 필요할 수 있습니다.
+4. Pages에서도 사용하려면 확인한 Production origin을 Pages의 `BIZ_API_BASE`에 설정하고 Pages를 다시 빌드합니다. Standard Protection에서는 해시가 붙은 개별 배포 URL이 보호되므로 배포 응답의 `url`을 그대로 사용하지 않습니다. 프로젝트에 할당된 짧은 Production `vercel.app` 도메인 또는 운영 커스텀 도메인을 확인합니다. [공식 보호 범위 안내](https://vercel.com/academy/optimize-your-vercel-account/deployment-protection)
+
+일별 공개 지원사업 수집과 Pages 갱신은 GitHub Actions가 담당합니다. Vercel 빌드 자체는 수집을 실행하지 않으며 직접 전송한 소스에 포함된 JSON으로 빌드합니다. Git 연결이 없는 현재 구성에서 Vercel 화면을 갱신하려면 최신 파일을 별도로 다시 배포해야 합니다. 향후 운영자가 Vercel GitHub App을 설치하고 저장소 연결을 완료하면 Git 자동 배포로 전환할 수 있습니다.
+
+호스팅 요금, API 활용 승인, 요청 한도는 각 서비스와 계정 설정을 확인하세요. 이 저장소는 결제 상품을 신청하거나 유료 한도를 자동으로 확장하지 않습니다.
+
+## 데이터 저장과 해석
+
+거래처·태그·메모·프로필·확인 기록은 현재 브라우저의 IndexedDB에 저장됩니다. 브라우저 데이터를 지우거나 다른 기기·브라우저·사이트 주소를 사용하면 같은 데이터가 자동으로 나타나지 않습니다. 필요한 기록은 앱에서 JSON 백업으로 보관하세요. 백업에는 직접 입력한 업무 정보가 포함될 수 있으므로 공개 저장소에 올리지 마세요.
+
+조회할 때는 입력한 사업자번호가 설정한 API 서버와 해당 제공기관에 전달됩니다. 등록정보 진위 대조는 별도로 입력한 개업일·대표자명을 국세청으로 전달하지만 거래처 기록에 저장하지 않습니다. 공개 지원사업 매칭에 사용하는 프로필은 브라우저 안에서 처리합니다.
+
+변경 기록은 사용자가 상태 확인을 실행했을 때 발생합니다. 브라우저가 닫힌 동안 거래처를 자동으로 감시하거나 이메일·메신저로 알림을 보내는 기능은 없습니다. 계속사업자라는 응답은 세무 등록 상태에 관한 사실이며 거래 안전성·지급능력을 뜻하지 않습니다. 미조회와 통신 오류 역시 폐업의 근거가 아닙니다.
+
+CSV 가져오기는 한 번에 최대 1,000개 데이터 행을 받으며 초과분을 몰래 버리지 않습니다. 정상 행, 오류 행, 중복 건수를 등록 전에 확인합니다. CSV 내보내기는 수식으로 해석될 수 있는 텍스트에 방어 처리를 적용합니다. 각 거래처의 확인 이력은 최근 50개까지 보관합니다.
+
+## 출처와 구현 참고
+
+- [국세청 사업자등록정보 진위확인 및 상태조회 서비스](https://www.data.go.kr/data/15081808/openapi.do)
+- [공정거래위원회 통신판매사업자 등록상세 조회 서비스](https://www.data.go.kr/data/15126315/openapi.do)
+- 지원사업 출처·개별 공고 원문·수집 범위: 앱의 **지원사업 찾기**, **데이터 현황** 및 공개 `data/collection-status.json`에서 확인
+- [GitHub Pages 사용자 정의 워크플로](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
+- [GitHub Actions 예약 이벤트](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
+- [Vercel Node.js Functions](https://vercel.com/docs/functions/runtimes/node-js)
+- [Vercel 프로젝트 설정](https://vercel.com/docs/project-configuration)
+
+표시 내용이 원문과 다르거나 공고가 수정된 경우에는 해당 기관의 최신 원문을 확인합니다. 공개 목록의 이름·주소 유사성만으로 서로 다른 사업자를 같은 업체로 합치지 않습니다.

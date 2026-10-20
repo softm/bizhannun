@@ -1,0 +1,16 @@
+{
+  "name": "bizhannun",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "사업자한눈 — 사업자 조회, 거래처 확인 기록과 지원사업 탐색",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env.local server/dev.mjs",
+    "start": "node --env-file-if-exists=.env.local server/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "collect": "node scripts/collect-programs.mjs"
+  }
+}

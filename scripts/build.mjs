@@ -1,0 +1,78 @@
+import { copyFile, lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { extname, join, resolve, sep } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { validateApiBase } from '../src/api-client.mjs';
+
+const ROOT = fileURLToPath(new URL('../', import.meta.url));
+const DIST = join(ROOT, 'dist');
+const ROOT_FILES = ['index.html', 'data-status.html', 'app-config.js', 'styles.css', 'manifest.webmanifest'];
+const REQUIRED_FILES = [
+  ...ROOT_FILES, 'assets/favicon.svg',
+  ...['app', 'domain', 'storage', 'api-client', 'programs'].map((name) => `src/${name}.mjs`),
+  'data/programs.json', 'data/collection-status.json',
+];
+const RULES = {
+  src: new Set(['.mjs', '.js', '.css', '.json']),
+  assets: new Set(['.svg', '.png', '.jpg', '.jpeg', '.webp', '.avif', '.gif', '.ico', '.woff', '.woff2', '.ttf', '.otf']),
+  data: new Set(['.json']),
+};
+
+async function collectFiles(directory, extensions, prefix = '') {
+  const directoryInfo = await lstat(directory);
+  if (!directoryInfo.isDirectory() || directoryInfo.isSymbolicLink()) throw new Error('공개 파일 경로는 실제 디렉터리여야 합니다.');
+  const result = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const relative = join(prefix, entry.name);
+    if (entry.isSymbolicLink()) throw new Error(`공개 디렉터리의 심볼릭 링크는 빌드할 수 없습니다: ${relative}`);
+    if (entry.isDirectory()) result.push(...await collectFiles(join(directory, entry.name), extensions, relative));
+    else if (entry.isFile() && extensions.has(extname(entry.name).toLowerCase())) result.push(relative);
+  }
+  return result;
+}
+
+// Only the public API origin is a build setting. Service keys are never read.
+let apiBase;
+if (process.env.BIZ_API_BASE?.trim()) {
+  try { apiBase = validateApiBase(process.env.BIZ_API_BASE); }
+  catch { throw new Error('BIZ_API_BASE에는 경로·쿼리·인증정보가 없는 HTTPS 서버 주소만 설정하세요. 로컬 HTTP는 localhost/127.0.0.1에서만 허용합니다.'); }
+}
+
+const files = [...ROOT_FILES];
+for (const [directory, extensions] of Object.entries(RULES)) {
+  files.push(...(await collectFiles(join(ROOT, directory), extensions)).map((name) => join(directory, name)));
+}
+const copiedPaths = new Set(files.map((name) => resolve(ROOT, name)));
+for (const required of REQUIRED_FILES) {
+  if (!copiedPaths.has(resolve(ROOT, required))) throw new Error(`필수 공개 파일이 없습니다: ${required}`);
+  const info = await lstat(join(ROOT, required));
+  if (!info.isFile() || info.isSymbolicLink()) throw new Error(`필수 공개 파일은 실제 파일이어야 합니다: ${required}`);
+  await readFile(join(ROOT, required));
+}
+for (const filename of files.filter((name) => name.startsWith(`src${sep}`) && ['.mjs', '.js'].includes(extname(name)))) {
+  const source = await readFile(join(ROOT, filename), 'utf8');
+  const imports = /\b(?:import|export)\s+(?:[^;"']*?\s+from\s*)?["']([^"']+)["']|\bimport\s*\(\s*["']([^"']+)["']/g;
+  for (const match of source.matchAll(imports)) {
+    const specifier = match[1] || match[2];
+    if (!specifier.startsWith('.')) continue;
+    const importedPath = fileURLToPath(new URL(specifier, pathToFileURL(join(ROOT, filename))));
+    if (!copiedPaths.has(importedPath)) throw new Error(`빌드에 포함되지 않는 브라우저 모듈 import: ${filename} → ${specifier}`);
+  }
+}
+// Read and validate data before replacing a previous build.
+for (const filename of files.filter((name) => name.endsWith('.json') || name.endsWith('.webmanifest'))) {
+  JSON.parse(await readFile(join(ROOT, filename), 'utf8'));
+}
+
+await rm(DIST, { recursive: true, force: true });
+await mkdir(DIST, { recursive: true });
+for (const filename of files) {
+  await mkdir(join(DIST, filename, '..'), { recursive: true });
+  await copyFile(join(ROOT, filename), join(DIST, filename));
+}
+if (apiBase !== undefined) {
+  const configuration = await readFile(join(DIST, 'app-config.js'), 'utf8');
+  await writeFile(join(DIST, 'app-config.js'), `${configuration.trimEnd()}\nwindow.BIZHANNUN_CONFIG = Object.freeze({ ...window.BIZHANNUN_CONFIG, apiBase: ${JSON.stringify(apiBase)} });\n`);
+}
+await writeFile(join(DIST, '.nojekyll'), '');
+console.log(`공개 파일 ${files.length + 1}개를 dist/에 빌드했습니다. 서버 코드·인증키·문서는 포함하지 않습니다.`);
