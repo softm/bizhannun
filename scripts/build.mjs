@@ -77,7 +77,7 @@ for (const filename of files) {
 await writeFile(join(DIST, 'app-config.js'), `window.BIZHANNUN_CONFIG = Object.freeze(${JSON.stringify(runtime).replaceAll('<', '\\u003c')});\n`);
 // Give HTML, settings and every browser module the same content-based version.
 // This prevents an older cached import from mixing with a newly deployed page.
-const browserFiles = files.filter((name) => name === 'app-config.js' || name === 'styles.css' || (name.startsWith(`src${sep}`) && ['.mjs', '.js'].includes(extname(name)))).sort();
+const browserFiles = files.filter((name) => name === 'app-config.js' || name === 'styles.css' || name === 'business-detail.css' || (name.startsWith(`src${sep}`) && ['.mjs', '.js'].includes(extname(name)))).sort();
 const hash = createHash('sha256');
 for (const filename of browserFiles) hash.update(filename).update(await readFile(join(DIST, filename)));
 const version = hash.digest('hex').slice(0, 12);
@@ -88,7 +88,7 @@ for (const filename of browserFiles.filter((name) => name.startsWith(`src${sep}`
 }
 for (const filename of ['index.html', 'data-status.html']) {
   const content = await readFile(join(DIST, filename), 'utf8');
-  const versioned = content.replace(/((?:src|href)=["'])(\.\/(?:src\/app\.mjs|styles\.css|app-config\.js))(["'])/g, `$1$2?v=${version}$3`);
+  const versioned = content.replace(/((?:src|href)=["'])(\.\/(?:src\/app\.mjs|styles\.css|business-detail\.css|app-config\.js))(["'])/g, `$1$2?v=${version}$3`);
   await writeFile(join(DIST, filename), versioned);
 }
 await writeFile(join(DIST, '.nojekyll'), '');

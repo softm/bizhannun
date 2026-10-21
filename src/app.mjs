@@ -12,6 +12,7 @@ import { renderBusinessSearch } from './business-search-view.mjs';
 import { renderBusinessWorkbench, LOOKUP_TABS, normalizeLookupTab, lookupTabForInsight } from './business-workbench-view.mjs';
 import { renderCollectionDashboard, buildBusinessProfileDraft, evidenceChanges } from './business-dashboard.mjs';
 import { renderBusinessDetail, buildBusinessDetailReport } from './business-detail-view.mjs';
+import { buildBusinessHistory, buildBusinessHistoryCsv } from './business-history.mjs';
 import { editorNoteDraft, sameNoteDraft, applyNoteDraft } from './business-detail-state.mjs';
 import { createAuthClient } from './auth.mjs';
 import { createCloudWorkspace, mergeGuestWorkspace } from './cloud-storage.mjs';
@@ -709,6 +710,8 @@ function detailArguments(partner) {
     changes:evidenceChanges(partner.enrichment,publicRecords.get(partner.businessNumber)),
     storageLabel:authState.user?'내 계정 · '+userLabel():'이 브라우저',
     activeTab:state?.tab||'overview',draft:state?.draft||editorNoteDraft(partner),
+    historyFilter:state?.historyFilter||'all',historyPeriod:state?.historyPeriod||'all',
+    historySort:state?.historySort||'newest',historyNow:state?.historyNow,
     busy:!!(state?.saving||state?.refreshing||saving||ui.batchBusy||authBusy()),
     activity:state?.saving||saving?'saving':state?.refreshing||ui.batchBusy?'refreshing':authBusy()?'connecting':null,
     notice:state?.notice||(state?.dirty?'저장하지 않은 변경사항이 있습니다.':''),error:state?.error||''};
@@ -725,9 +728,11 @@ function detailModal(partner,{refresh=false}={}) {
     const draft=cached?.draft||baseline;
     modal={detailId:partner.id,wide:true,detailState:{tab:'overview',draft:{...draft},baseline,
       dirty:!sameNoteDraft(draft,baseline),saving:false,refreshing:false,composing:false,renderPending:false,
+      historyFilter:'all',historyPeriod:'all',historySort:'newest',historyNow:new Date().toISOString(),
       tabScroll:{},notice:cached?'이전에 작성하던 메모 초안을 불러왔습니다. 저장하면 반영됩니다.':'',error:''}};
   }
   const state=modal.detailState;
+  state.historyNow=new Date().toISOString();
   const focus=modalRoot.contains(document.activeElement)?describeFocus(document.activeElement):null;
   const scroll=modalRoot.querySelector('.modal-body')?.scrollTop||0;
   const tabBarScroll=modalRoot.querySelector('.detail-tabs')?.scrollLeft||0;
@@ -758,6 +763,18 @@ function switchDetailTab(tab,{focus=false,editor=false}={}) {
   if(editor)modalRoot.querySelector('#detail-note')?.focus({preventScroll:true});
   else if(focus||document.activeElement?.closest('[role=tabpanel][hidden]'))modalRoot.querySelector('#detail-tab-'+tab)?.focus({preventScroll:true});
   modalRoot.querySelector('#detail-tab-'+tab)?.scrollIntoView({block:'nearest',inline:'nearest'});
+}
+function updateDetailHistory({filter,period,sort},{reset=false}={}) {
+  const partner=byId(modal?.detailId),state=modal?.detailState;
+  if(!partner||!state)return;
+  if(filter!==undefined&&!['all','status','tax','issues'].includes(filter))return;
+  if(period!==undefined&&!['all','30','90','365'].includes(period))return;
+  if(sort!==undefined&&!['newest','oldest'].includes(sort))return;
+  if(filter!==undefined)state.historyFilter=filter;
+  if(period!==undefined)state.historyPeriod=period;
+  if(sort!==undefined)state.historySort=sort;
+  detailModal(partner,{refresh:true});
+  if(reset)modalRoot.querySelector('#detail-history-filter-all')?.focus({preventScroll:true});
 }
 async function saveDetailNotes(form) {
   const activeModal=modal,epoch=accountEpoch;
@@ -1182,6 +1199,8 @@ document.addEventListener('compositionend',event=>{
 });
 document.addEventListener('change',async event=>{
   const t=event.target;
+  if(t.id==='detail-history-period'){updateDetailHistory({period:t.value});return;}
+  if(t.id==='detail-history-sort'){updateDetailHistory({sort:t.value});return;}
   if(t.id==='lookup-type'){
     lookupSerial++;interactionEpoch++;ui.lookupType=t.value;ui.lookupError='';ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';clearLookupResult();
     render();document.getElementById('business-query')?.focus({preventScroll:true});return;
@@ -1231,6 +1250,20 @@ document.addEventListener('click',async event=>{
   if(action==='close-modal-backdrop'){if(event.target===element)closeModal();return;}
   if(action==='close-modal'){closeModal();return;}
   if(action==='detail-tab'){switchDetailTab(element.dataset.tab,{editor:element.getAttribute('role')!=='tab'&&element.dataset.tab==='notes'});return;}
+  if(action==='detail-history-filter'){updateDetailHistory({filter:element.dataset.filter});return;}
+  if(action==='detail-history-reset'){updateDetailHistory({filter:'all',period:'all',sort:'newest'},{reset:true});return;}
+  if(action==='detail-history-export'){
+    const partner=byId(modal?.detailId),state=modal?.detailState;if(!partner||!state)return;
+    try{
+      const history=buildBusinessHistory({partner,businessNumber:partner.businessNumber,filter:state.historyFilter,
+        period:state.historyPeriod,sort:state.historySort,now:state.historyNow});
+      if(!history.rows.length){toast('선택한 조건에 내보낼 조회 기록이 없습니다.');return;}
+      downloadText('사업자한눈_변동이력_'+partner.businessNumber+'_'+history.filter+'_'+history.period+'.csv',
+        buildBusinessHistoryCsv({businessNumber:partner.businessNumber,rows:history.rows}),'text/csv;charset=utf-8');
+      toast('현재 조건의 조회 기록 '+number(history.rows.length)+'건을 CSV로 내려받았습니다.');
+    }catch(error){toast(error.message||'조회 기록을 내보내지 못했습니다.',true);}
+    return;
+  }
   if(action==='detail-refresh'){await refreshDetailStatus();return;}
   if(action==='detail-copy-number'){
     const partner=byId(modal?.detailId);if(!partner)return;
