@@ -17,23 +17,24 @@ v0.1 초기 검증: 2026-10-20. v0.2 로그인·계정 보관 추가 기록: 202
 | 항목 | 확인된 내용 | 남은 검증 |
 | --- | --- | --- |
 | Firebase 프로젝트 | `biz-hannun`, 표시 이름 Biz Hannun, Spark 플랜 생성 확인 | 운영 사용량 점검 |
-| Firebase 웹 앱·공개 API | `bizhannun-web` 구성, 운영 `/api/config` HTTP 200, Google·email 구성 완료, Pages origin CORS 확인 | 카카오·네이버 인증값 등록 후 실제 인증 |
-| Firestore 데이터베이스 | Enterprise Native `bizhannun`, `asia-northeast3`, 실시간 기능·보안 규칙 게시; 운영 프로필 저장 후 revision 1 재조회 | 수정본에서 저장 완료 화면·다른 기기 재조회 확인 |
-| 구글 로그인 | 운영 Pages 앱에서 실제 Google 계정 선택, 로그인 완료, 계정 저장소 연결, 로그아웃 확인 | 수정 배포 이후 재로그인·기록 유지 재확인 |
+| Firebase 웹 앱·공개 API | `bizhannun-web` 구성; 후속 `/api/config` HTTP 200·Pages CORS 허용, Google·email `configured: true`, kakao·naver `false` 확인 | 카카오·네이버 인증값 등록 후 실제 인증 |
+| Firestore 데이터베이스 | Enterprise Native `bizhannun`, `asia-northeast3`, 실시간 기능·보안 규칙 게시; 운영 저장 직후 성공 표시·새로고침 복원 및 최종 revision 4 확인 | 다른 물리 기기에서 재조회 |
+| 구글 로그인 | 같은 Chrome의 Pages·Vercel 두 origin에서 Google 로그인 성공; Pages 재로그인과 별도 origin의 동일 계정 자료 복원 확인 | 다른 물리 기기에서 동일 계정 인증·조회 |
 | 이메일 로그인 | Console 제공자 활성화, 가입·로그인·재설정·인증 메일 UI와 클라이언트 구현·자동 검사 | 실제 이메일 가입·메일 수신 확인 |
-| 승인된 도메인 | `softm.github.io`, `bizhannun.vercel.app` 등록; Pages에서 Google 인증 성공 | 별도 도메인 추가 시 재확인 |
-| 계정 분리 정책 | Console의 `ID 공급업체별로 여러 계정 만들기` 저장; 이메일 자동 병합 없음; 에뮬레이터에서 다른 UID 접근 거부 | 다른 실제 계정·기기 간 검증 |
-| 카카오·네이버 로그인 | OAuth 서버·상태 쿠키·제공자 확인·Custom Token 구현; Production `AUTH_SESSION_SECRET` 등록 | 앱 인증값·Firebase Admin 설정 및 실제 인증 |
-| 계정 정보 저장 | 거래처·메모·프로필·조회 이력 저장 구현; 실제 운영 프로필 커밋·재조회 확인 | 저장 직후 충돌 안내 보완 후 운영 UI 재확인 |
-| 기존 기기 자료 이전 | 명시적 가져오기, 사업자번호 중복 보호, 기기 원본 보존·자동 검사 | 기존 자료가 있는 브라우저의 실제 이전 확인 |
-| v0.2 배포 | 저장 확인 수정 커밋 `81cd1c1`의 Pages Actions `39513872679` 성공; Vercel `dpl_HCF4kEu78nQGDhgxWJf8SVUgqPDN` READY·운영 alias 확인 | 수정 배포 후 실제 브라우저 인증·저장 재검증 |
-| 국세청·공정위 | 운영 `/api/health` HTTP 200, 두 제공자 모두 `configuration: missing_key`, `authentication: not_checked` | Production 키 등록·재배포 후 실제 기관 응답 확인 |
+| 승인된 도메인 | `softm.github.io`, `bizhannun.vercel.app` 등록; 두 origin에서 Google 인증 성공 | 별도 도메인 추가 시 재확인 |
+| 계정 분리 정책 | Console의 `ID 공급업체별로 여러 계정 만들기` 저장; 이메일 자동 병합 없음; 에뮬레이터에서 다른 UID 접근 거부 | 다른 실제 계정·다른 물리 기기 간 검증 |
+| 카카오·네이버 로그인 | OAuth 서버·상태 쿠키·제공자 확인·Custom Token 구현; Vercel 환경변수 메타데이터에서 Production `AUTH_SESSION_SECRET`만 등록된 상태 재확인 | 앱 인증값·Firebase Admin 설정 및 실제 인증 |
+| 계정 정보 저장 | 운영 프로필 저장·새로고침·별도 origin 복원 확인; 다른 앱 인스턴스의 변경 안내와 최신 기록 불러오기 확인; 테스트 사업체명을 빈 값으로 정리하고 revision 4 저장 성공 | 실제 거래처·메모·조회 이력의 운영 저장 검증 |
+| 기존 기기 자료 이전 | Vercel에서 명시적 가져오기 후 revision 3 저장 성공, 계정의 기존 프로필 유지, 로그아웃 후 기기 프로필 원문 복원 확인 | 거래처 0곳으로 시험했으므로 실제 거래처·사업자번호 중복 사례는 미검증 |
+| 미저장 프로필 보호 | Vercel 비로그인 공간에서 Google 로그인 전 안내, 내 사업으로 돌아온 뒤 입력 보존, 프로필 저장 후 인증 팝업 시작 확인 | 이메일 가입·로그인 등 미검증 인증 흐름은 별도 확인 |
+| v0.2 배포 | 커밋 `6194f8f`의 Pages Actions `39542201349` completed/success; Vercel `dpl_6kocPJjMKx5CXjjxAcva1WHVLLpN` READY·운영 alias, 양쪽 공개 모듈의 로그인 전 가드와 안내 문구 HTTP 확인 | — |
+| 국세청·공정위 | 후속 `/api/health` HTTP 200·Pages CORS 허용, 두 제공자 모두 `configuration: missing_key`·`authentication: not_checked`; 환경변수 메타데이터에서도 미설정 재확인 | Production 키 등록·재배포 후 실제 기관 응답 확인 |
 
 Firestore Console에서 `bizhannun` 규칙 게시와 새 활성 버전을 확인했습니다. 게시 규칙의 SHA-256은 `32b7854f24bd2a9f28ff7f34fce12730bdeb619a9127a9d69b8b2239c1a8479b`입니다. 규칙 게시, 에뮬레이터 시험, 실제 계정 시험의 범위를 구분합니다.
 
 ## v0.2 운영 브라우저·API 확인
 
-2026-10-21 한국 시간에 다음 동작을 실제 운영 주소에서 확인했습니다.
+2026-10-21 한국 시간의 최초 운영 확인에서 다음 동작을 실제 운영 주소에서 확인했습니다.
 
 - 로그인 설정을 다시 불러오자 Google 버튼과 이메일 폼이 활성화됐습니다. 인증값이 없는 카카오·네이버는 `준비 중`으로 표시됐습니다.
 - Google 팝업에서 계정을 선택한 뒤 운영 앱의 `로그인됨`과 `계정 저장소 연결됨`, 저장 버전 0을 확인했습니다.
@@ -42,7 +43,7 @@ Firestore Console에서 `bizhannun` 규칙 게시와 새 활성 버전을 확인
 - 로그아웃 후 계정 자료가 화면에서 제거되고 비로그인 공간·로그인 폼으로 돌아오는 것을 확인했습니다.
 - 쿠키 없이 호출한 `/api/config`와 `/api/health`가 HTTP 200을 반환하고 `Access-Control-Allow-Origin: https://softm.github.io`를 제공했습니다.
 
-이후 브라우저 연결이 끊겨 수정 배포 후의 실제 재로그인·새로고침·다른 기기 조회는 추가 확인하지 못했습니다. 검증용 프로필 문구는 해당 계정에 남아 있으며 실제 사업체 정보로 바꿔 저장할 수 있습니다. 이메일 가입·메일 수신, 카카오·네이버 실제 로그인, 국세청 원천 인증 성공을 완료로 표시하지 않습니다.
+위 확인 직후에는 브라우저 연결이 끊겨 수정 배포 후의 재로그인·새로고침·다른 기기 조회를 추가 확인하지 못했습니다. 이는 당시 검증의 제한이며, 이후 확인한 범위는 아래 후속 운영 검증에 구분해 기록합니다. 이메일 가입·메일 수신, 카카오·네이버 실제 로그인, 국세청 원천 인증 성공은 아직 완료로 표시하지 않습니다.
 
 ### 로그인 화면
 
@@ -54,9 +55,39 @@ Firestore Console에서 `bizhannun` 규칙 게시와 새 활성 버전을 확인
 
 실제 운영에서 커밋 후 재조회에는 성공했지만 저장 직후 확인에서 충돌로 표시되는 경합을 발견했습니다. 설치된 Firebase SDK의 `getDocFromServer`가 기존 실시간 listener의 마지막 서버 스냅샷을 이용하는 경로를 확인했습니다. 이전 head를 반환하는 조건을 강제로 재현한 시험은 수정 전 저장 후 `cloud/conflict`로 실패했고, 수정 후 통과했습니다. 운영 서버의 스트림 순서를 직접 계측한 것은 아니므로 이 재현 시험과 실제 운영 관찰을 구분합니다.
 
-변경 가능한 head를 읽기 전용 `runTransaction(transaction.get)`으로 확인하도록 수정했습니다. 실제 더 높은 revision은 계속 충돌로 처리하며, 커밋 후 최신 head를 확인하지 못하면 `cloud/confirmation-pending`으로 안내하고 커밋한 자료를 보존합니다. Rules나 저장 스키마는 변경하지 않았습니다. 저장 어댑터 **16/16**, 실제 Firebase SDK와 Enterprise 에뮬레이터 **8/8**이 통과했습니다. `check`·기본 테스트·`build`·`git diff --check`도 통과했습니다. 수정 이후 실제 운영 브라우저 재검증은 연결 상실로 완료하지 못했습니다.
+변경 가능한 head를 읽기 전용 `runTransaction(transaction.get)`으로 확인하도록 수정했습니다. 실제 더 높은 revision은 계속 충돌로 처리하며, 커밋 후 최신 head를 확인하지 못하면 `cloud/confirmation-pending`으로 안내하고 커밋한 자료를 보존합니다. Rules나 저장 스키마는 변경하지 않았습니다. 저장 어댑터 **16/16**, 실제 Firebase SDK와 Enterprise 에뮬레이터 **8/8**이 통과했습니다. `check`·기본 테스트·`build`·`git diff --check`도 통과했습니다. 이 수정 직후에는 연결 상실로 운영 브라우저 재검증을 완료하지 못했으며, 이후 저장 성공 표시를 확인한 결과를 다음 절에 기록합니다.
 
-수정 커밋은 [`81cd1c1`](https://github.com/softm/bizhannun/commit/81cd1c12eaeaf5a046840883d64569c3f8845dcc)이며, [Pages 배포 실행](https://github.com/softm/bizhannun/actions/runs/39513872679)의 build·deploy가 모두 성공했습니다. Vercel 배포 `dpl_HCF4kEu78nQGDhgxWJf8SVUgqPDN`은 READY이며 `bizhannun.vercel.app`이 이 배포를 가리키는 것을 확인했습니다. 양쪽 공개 HTML에서 실제 모듈 URL을 따라가 새 저장 확인 로직과 프로필 보관 안내 문구를 확인했습니다. 운영 `/api/config`와 `/api/health`도 HTTP 200·Pages CORS 허용을 다시 확인했습니다. 국세청·공정위 키와 카카오·네이버 서버 인증값은 여전히 설정 대기였습니다.
+수정 커밋은 [`81cd1c1`](https://github.com/softm/bizhannun/commit/81cd1c12eaeaf5a046840883d64569c3f8845dcc)이며, [당시 Pages 배포 실행](https://github.com/softm/bizhannun/actions/runs/39513872679)의 build·deploy가 모두 성공했습니다. 당시 Vercel 배포 `dpl_HCF4kEu78nQGDhgxWJf8SVUgqPDN`의 READY 상태와 `bizhannun.vercel.app` 연결을 확인했습니다. 양쪽 공개 HTML에서 실제 모듈 URL을 따라가 저장 확인 로직과 프로필 보관 안내 문구를 확인했습니다. 운영 `/api/config`와 `/api/health`도 HTTP 200·Pages CORS 허용을 다시 확인했습니다. 국세청·공정위 키와 카카오·네이버 서버 인증값은 여전히 설정 대기였습니다.
+
+### 2026-10-21 후속 운영 검증
+
+한국 시간 2026-10-21에 실제 브라우저에서 다음 범위를 추가 확인했습니다. Pages와 Vercel은 **같은 Chrome의 서로 다른 origin**에서 실행했습니다. 서로 다른 물리 기기나 서로 다른 실제 계정을 사용한 시험은 아닙니다.
+
+1. Pages 운영 앱에서 Google로 다시 로그인하자 기존에 저장한 revision 1의 프로필이 복원됐습니다.
+2. 테스트 사업체명만 `Firestore 저장·복원 검증용 · 테스트`로 변경해 저장했습니다. 저장 직후 `서버 확인 완료`와 저장 버전 2가 표시됐습니다.
+3. Pages를 새로고침한 뒤 동일한 테스트 사업체명이 복원되는 것을 확인했습니다.
+4. Vercel의 별도 origin에서 비로그인 상태로 사업 프로필을 입력한 다음 Google 로그인을 눌렀습니다. `작성 중인 사업 프로필을 먼저 저장해 주세요` 안내가 표시됐고, `내 사업으로 돌아가 저장하기`를 누르자 입력이 그대로 유지됐습니다. 프로필을 기기에 저장한 후에는 Google 인증 팝업이 정상적으로 시작됐습니다.
+5. Vercel origin에서도 Google 로그인을 완료했습니다. 서버의 revision 2와 Pages에서 저장한 `Firestore 저장·복원 검증용 · 테스트` 프로필이 동일하게 복원됐습니다.
+6. Vercel 기기 공간에 `로그인 전 기기 저장 검증용 · 테스트` 프로필이 있는 상태에서 명시적 가져오기를 실행했습니다. `서버 확인 완료`와 revision 3을 확인했으며, 계정의 기존 프로필을 유지했습니다. 이 시험의 거래처는 0곳이므로 실제 거래처 추가나 사업자번호 중복 사례를 검증한 것으로 보지 않습니다.
+7. Vercel에서 로그아웃하자 기기의 `로그인 전 기기 저장 검증용 · 테스트` 프로필 원문이 그대로 복원됐습니다. 원본 보존을 확인한 뒤 기기 테스트 사업체명을 빈 값으로 저장했고, 페이지를 새로고침한 후에도 빈 값으로 유지되는 것을 확인했습니다.
+8. Pages의 다른 앱 인스턴스에 `다른 기기에서 기록이 변경되었습니다`라는 안내가 표시됐습니다. `최신 기록 확인`을 눌러 계정의 최신 기록을 정상적으로 불러왔습니다. 안내 문구에 “다른 기기”가 포함되지만, 실제 확인한 대상은 같은 Chrome의 별도 origin입니다.
+9. 마지막으로 Pages 계정의 테스트 사업체명을 빈 값으로 저장해 정리했고, `서버 확인 완료`와 저장 버전 4를 확인했습니다.
+
+아래 이미지는 Pages에서 revision 2를 저장한 **당시의 확인 화면**입니다. 이후 가져오기와 테스트 사업체명 정리까지 마친 최종 확인 버전은 revision 4입니다.
+
+![운영 Pages에서 프로필 저장 직후 서버 확인 완료와 저장 버전 2](screenshots/firestore-save-confirmed-v02.jpg)
+
+Vercel에서 확인한 미저장 프로필 로그인 안내:
+
+![작성 중인 사업 프로필을 먼저 저장하도록 안내하는 로그인 가드](screenshots/profile-login-guard-v02.jpg)
+
+현재 후속 배포의 코드 커밋은 [`6194f8f`](https://github.com/softm/bizhannun/commit/6194f8f8756637e3d7cd17e11f5d72315e6c9970)입니다. [Pages 실행 `39542201349`](https://github.com/softm/bizhannun/actions/runs/39542201349)은 completed/success이며, Vercel 배포 `dpl_6kocPJjMKx5CXjjxAcva1WHVLLpN`의 READY 상태와 `bizhannun.vercel.app` 연결도 확인했습니다. 두 공개 앱 HTML이 참조하는 실제 module URL을 따라가 `blockLoginForProfileDraft`와 한국어 안내 문구가 양쪽 모두 포함된 것을 HTTP로 확인했습니다.
+
+후속 `/api/config`와 `/api/health` 요청은 각각 HTTP 200을 반환했고 Pages origin의 CORS를 허용했습니다. 공개 설정은 Google·email의 `configured: true`, kakao·naver의 `configured: false`를 반환했습니다. 기관 상태는 국세청·공정위 모두 `configuration: missing_key`, `authentication: not_checked`였습니다. 제공자 설정 플래그를 실제 이메일·SNS 로그인 성공으로 해석하지 않습니다.
+
+Vercel 환경변수 메타데이터에는 Production `AUTH_SESSION_SECRET`만 등록된 것을 재확인했습니다. 국세청·공정위 키, 카카오·네이버 앱 인증값, Firebase Admin 서비스 계정은 미설정 상태입니다. 이 확인은 비밀값 자체나 원천 서비스의 인증 성공을 검사한 결과가 아닙니다.
+
+Vercel 별도 origin에서의 Google 로그인·계정 자료 조회·명시적 가져오기·로그아웃 후 기기 원본 복원을 확인했습니다. 기기와 계정의 테스트 사업체명은 모두 빈 값으로 정리 완료했습니다. 기존 저장 버전이나 기록 전체를 삭제한 것은 아닙니다. 확인 범위는 프로필 중심이며 실제 거래처의 사업자번호 중복 사례는 포함하지 않습니다. 이메일 가입·메일 수신, 카카오·네이버 실제 로그인, 다른 물리 기기, 다른 실제 계정의 분리는 아직 검증하지 않았습니다.
 
 ## v0.2 자동 검사 범위
 

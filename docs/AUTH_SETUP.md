@@ -18,7 +18,7 @@
 
 ## 1. 구글·이메일 로그인
 
-2026-10-21 한국 시간 기준으로 Firebase Console에서 Google·이메일/비밀번호 제공자를 활성화했습니다. Google의 공개 표시 이름은 `사업자한눈`이며, `softm.github.io`와 `bizhannun.vercel.app`를 승인된 도메인에 등록했습니다. 계정 분리 설정도 저장했습니다. 운영 Pages 앱에서 실제 Google 계정으로 로그인·로그아웃했고, 해당 UID의 Firestore 공간을 읽는 동작까지 확인했습니다. 이메일 가입·메일 전송과 카카오·네이버 실제 인증은 별도 검증 항목입니다.
+2026-10-21 한국 시간 기준으로 Firebase Console에서 Google·이메일/비밀번호 제공자를 활성화했습니다. Google의 공개 표시 이름은 `사업자한눈`이며, `softm.github.io`와 `bizhannun.vercel.app`를 승인된 도메인에 등록했습니다. 계정 분리 설정도 저장했습니다. 운영 Pages 앱에서 실제 Google 계정으로 로그인·로그아웃했고, 후속 검증에서는 다시 로그인해 기존 revision 1의 프로필을 복원했습니다. 같은 Chrome의 Vercel origin에서도 Google 로그인을 완료해 Pages에서 저장한 revision 2의 프로필을 동일하게 불러왔습니다. 이는 서로 다른 origin의 앱 인스턴스 시험이며, 다른 물리 기기에서 검증한 결과는 아닙니다. 이메일 가입·메일 전송, 카카오·네이버 실제 인증, 다른 물리 기기·다른 실제 계정의 동작은 아직 검증하지 않았습니다.
 
 1. Firebase Authentication에서 사용할 제공자를 활성화합니다. 구글은 지원 이메일 등 콘솔에서 요구하는 항목을 설정합니다.
 2. Authentication의 승인된 도메인에 `softm.github.io`, `bizhannun.vercel.app`를 등록합니다. 프로토콜·경로·포트는 넣지 않습니다.
@@ -29,9 +29,13 @@
 
 구글·이메일 로그인은 Firebase 웹 SDK가 처리합니다. Firebase 서버 개인키는 카카오·네이버의 Custom Token 발급에 필요하며 구글·이메일 로그인의 필수 조건은 아닙니다. 자료를 다시 불러올 때는 같은 로그인 제공자의 같은 계정을 사용합니다. 이 버전에는 서로 다른 제공자의 계정을 연결·병합하는 기능이 없습니다.
 
+작성 중인 사업 프로필이 있으면 Google·카카오·네이버 로그인과 이메일 로그인·가입 전에 먼저 저장하도록 안내합니다. `내 사업으로 돌아가 저장하기`를 눌러 입력을 보관한 뒤 다시 로그인할 수 있습니다. 비밀번호를 안내창이나 별도 상태에 보관하지 않으며, 기기에 저장한 자료를 계정으로 가져올지는 로그인 후 선택합니다. Vercel의 비로그인 공간에서 Google 버튼으로 안내를 띄우고 입력이 보존된 상태로 돌아온 뒤 저장하면 인증 팝업이 시작되는 것을 확인했습니다. 이어서 Google 로그인과 명시적 가져오기, 로그아웃 후 기기 프로필 원문 복원까지 확인했습니다.
+
 ## 2. Firestore에 업무 정보 보관
 
-Enterprise Native 데이터베이스 `bizhannun`은 `asia-northeast3`에 실시간 기능을 활성화하여 생성했고, Console에서 보안 규칙을 게시한 뒤 새 활성 버전을 확인했습니다. 게시한 규칙의 SHA-256은 `32b7854f24bd2a9f28ff7f34fce12730bdeb619a9127a9d69b8b2239c1a8479b`입니다. 공식 Enterprise 에뮬레이터에서 규칙 검사를 통과했으며, 운영 Google 계정의 프로필을 저장한 뒤 다시 불러와 revision 1을 확인했습니다. 저장 직후 확인 과정에서 발견한 충돌 안내 문제와 수정 검증 범위는 [검증 기록](VERIFICATION.md)에 남깁니다.
+Enterprise Native 데이터베이스 `bizhannun`은 `asia-northeast3`에 실시간 기능을 활성화하여 생성했고, Console에서 보안 규칙을 게시한 뒤 새 활성 버전을 확인했습니다. 게시한 규칙의 SHA-256은 `32b7854f24bd2a9f28ff7f34fce12730bdeb619a9127a9d69b8b2239c1a8479b`입니다. 공식 Enterprise 에뮬레이터에서 규칙 검사를 통과했습니다. 운영 Pages의 후속 검증에서는 테스트 사업체명만 `Firestore 저장·복원 검증용 · 테스트`로 변경해 저장했고, 저장 직후 `서버 확인 완료`·revision 2와 새로고침 후 동일 문구 복원을 확인했습니다.
+
+같은 Chrome의 Vercel origin에서 명시적 가져오기를 실행한 뒤 revision 3 저장 성공과 계정의 기존 프로필 유지를 확인했습니다. 로그아웃하자 기기의 프로필 원문이 그대로 복원됐습니다. 거래처는 0곳이었으므로 실제 거래처 추가·사업자번호 중복 사례를 운영에서 검증한 것은 아닙니다. Pages의 별도 앱 인스턴스에서는 변경 안내가 표시됐고 `최신 기록 확인`으로 정상적으로 불러왔습니다. 마지막으로 기기와 계정의 테스트 사업체명을 각각 빈 값으로 정리했습니다. 계정은 저장 직후 `서버 확인 완료`·revision 4와 빈 사업체명을, Vercel 기기 공간은 새로고침 후에도 빈 사업체명이 유지되는 것을 확인했습니다. 두 공간의 테스트 사업체명 정리는 완료했으며, 기존 저장 버전이나 기록 전체를 삭제한 것은 아닙니다. 이전 충돌 안내의 수정 과정과 실제 확인 범위·당시 화면은 [검증 기록](VERIFICATION.md)에 남깁니다.
 
 - 앱과 데이터베이스는 같은 Firebase 프로젝트를 사용합니다.
 - 기본 연결 대상은 `bizhannun` 데이터베이스입니다. `(default)` 데이터베이스와 혼동하지 않도록 콘솔의 데이터베이스 선택기를 확인합니다.
@@ -53,13 +57,13 @@ Enterprise Native 데이터베이스 `bizhannun`은 `asia-northeast3`에 실시�
 
 Vercel에는 `AUTH_SESSION_SECRET`, Firebase 서버 서비스 계정, `KAKAO_CLIENT_ID`·`KAKAO_CLIENT_SECRET`, `NAVER_CLIENT_ID`·`NAVER_CLIENT_SECRET`을 필요한 제공자 범위에 맞게 설정합니다. Firebase 서버 서비스 계정의 프로젝트는 웹 앱 설정의 `biz-hannun`과 일치해야 합니다.
 
-현재 `AUTH_SESSION_SECRET`은 Production에 등록했습니다. Firebase Admin 서비스 계정과 카카오·네이버 앱 인증값은 아직 등록하지 않았으므로 해당 로그인은 설정 대기입니다. 설정이 끝나면 Production을 새로 배포하고 실제 제공자 인증과 자료 저장을 확인합니다.
+2026-10-21 한국 시간에 Vercel 환경변수 메타데이터를 다시 확인했으며, Production `AUTH_SESSION_SECRET`만 등록된 상태입니다. Firebase Admin 서비스 계정과 카카오·네이버 앱 인증값은 아직 등록하지 않았으므로 해당 로그인은 설정 대기입니다. 후속 `/api/config` HTTP 200 응답에서도 Google·email은 `configured: true`, kakao·naver는 `configured: false`였고 Pages origin의 CORS 허용을 확인했습니다. 설정이 끝나면 Production을 새로 배포하고 실제 제공자 인증과 자료 저장을 확인합니다.
 
 ## 4. “국세청 API 인증키가 설정되지 않았습니다” 해결
 
 **공공데이터포털 활용신청과 앱 서버에 인증키를 등록하는 것은 별개의 단계입니다.** 이 메시지는 현재 실행 중인 API 서버가 `NTS_SERVICE_KEY` 또는 대체키 `DATA_GO_KR_SERVICE_KEY`를 읽지 못했다는 뜻입니다. 활용신청 승인 여부 자체를 조회한 결과가 아닙니다.
 
-Vercel 서버의 국세청·공정위 인증키는 아직 등록하지 않았습니다. 아래 Production 환경변수 등록과 재배포가 필요합니다. 현재 API는 Vercel에서 실행하므로 이 키를 GitHub Secret에 추가할 필요는 없습니다.
+2026-10-21 한국 시간에 Vercel 환경변수 메타데이터에서 국세청·공정위 인증키가 아직 등록되지 않은 상태를 다시 확인했습니다. 후속 `/api/health`도 HTTP 200·Pages CORS 허용과 함께 두 제공자의 `configuration: missing_key`, `authentication: not_checked`를 반환했습니다. 아래 Production 환경변수 등록과 재배포가 필요합니다. 현재 API는 Vercel에서 실행하므로 이 키를 GitHub Secret에 추가할 필요는 없습니다.
 
 1. [국세청 사업자등록정보 진위확인 및 상태조회 서비스](https://www.data.go.kr/data/15081808/openapi.do)에서 신청한 계정의 활용 상태와 발급된 인증키를 확인합니다.
 2. [Vercel 환경변수 설정](https://vercel.com/softms-projects/bizhannun/settings/environment-variables)에서 `NTS_SERVICE_KEY`를 추가합니다. 값은 발급된 **일반 인증키(Decoding)**를 사용하고 Production 범위에 등록합니다. 이 구현은 디코딩 키와 퍼센트 인코딩된 키를 한 번만 인코딩하여 처리합니다.
