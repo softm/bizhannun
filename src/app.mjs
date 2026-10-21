@@ -759,7 +759,7 @@ async function submitLookup(value,{refresh=false,type=ui.lookupType}={}){
 }
 async function lookup(value,{candidate=null}={}) {
   const bno=normalizeBusinessNumber(value);
-  if(!candidate){ui.lookupQuery=value;ui.nameQuery='';ui.nameSearchError='';}
+  if(!candidate){ui.lookupQuery=value;if(ui.lookupType==='name')ui.lookupType='number';ui.nameQuery='';ui.nameSearchError='';}
   if(!isValidBusinessNumber(value)) {
     ui.lookupError='사업자등록번호 10자리와 검증번호를 확인해 주세요.';render();
     return;
