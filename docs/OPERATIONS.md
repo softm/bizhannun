@@ -19,7 +19,7 @@ v0.2는 사용자 계정과 Firestore 정보 보관을 구현합니다. 팀 공�
 
 | 이름 | 위치 | 내용 |
 | --- | --- | --- |
-| `NTS_SERVICE_KEY` | 로컬 서버 또는 Vercel 서버 환경변수 | 국세청 상태조회·진위 대조에 사용할 인증키 |
+| `NTS_SERVICE_KEY` | 로컬 서버 또는 Vercel 서버 환경변수 | 국세청 상태조회·진위 대조용 인증키. Production sensitive 등록·단건 상태 조회 확인 완료 |
 | `DATA_GO_KR_SERVICE_KEY` | 서버 환경변수, 선택 | `NTS_SERVICE_KEY`가 비어 있을 때의 국세청 인증키 대안 |
 | `FTC_SERVICE_KEY` | 서버 환경변수 | 공정위 통신판매 신고정보 조회 인증키 |
 | `ALLOWED_ORIGINS` | 서버 환경변수 | 추가로 허용할 브라우저 origin 목록. 쉼표로 구분 |
@@ -83,7 +83,9 @@ npm run build
 
 ### 현재 연결 상태와 초기 직접 배포
 
-`bizhannun` 프로젝트는 Node.js 24 환경으로 2026-10-20에 초기 운영 배포를 완료했고, 2026-10-21 한국 시간에 v0.2 로그인·공개 설정 API를 운영 배포했습니다. 공개 운영 origin은 `https://bizhannun.vercel.app`이며 `/api/health`의 익명 JSON 응답과 Pages origin의 CORS를 확인했습니다. 국세청·공정위 키는 미설정 상태입니다. Git 저장소 연결 요청은 필요한 Vercel GitHub App 설치가 없어 완료되지 않았으므로 현재 Git push로 Vercel에 자동 배포되지는 않습니다. 초기 배포는 검증한 로컬 소스를 Vercel REST API로 직접 전달했습니다.
+`bizhannun` 프로젝트는 Node.js 24 환경으로 2026-10-20에 초기 운영 배포를 완료했고, 2026-10-21 한국 시간에 v0.2 로그인·공개 설정 API를 운영 배포했습니다. 공개 운영 origin은 `https://bizhannun.vercel.app`이며 `/api/health`의 익명 JSON 응답과 Pages origin의 CORS를 확인했습니다. 같은 날 국세청 인증키를 Production sensitive 환경변수로 등록하고 재배포 `dpl_5RrCBZX3GAWbpiXMqm5NJ9hPvjru`의 READY 상태와 운영 alias 연결을 확인했습니다. 15:21 한국 시간에 실제 국세청 단건 조회 응답과 Pages 화면의 사업자 상태·과세유형 표시를 확인했습니다. 공정위 인증키와 카카오·네이버 서버 인증 설정은 아직 미완료입니다.
+
+Git 저장소 연결 요청은 필요한 Vercel GitHub App 설치가 없어 완료되지 않았으므로 현재 Git push로 Vercel에 자동 배포되지는 않습니다. 초기 배포는 검증한 로컬 소스를 Vercel REST API로 직접 전달했습니다.
 
 [Create a new deployment](https://vercel.com/docs/rest-api/deployments/create-a-new-deployment)의 `POST /v13/deployments` 요청에서 기존 프로젝트 식별자, 팀 식별자, `target: "production"`을 지정하고 `files` 배열로 파일을 전달합니다. 인라인 파일은 다음 형식입니다.
 
@@ -175,9 +177,11 @@ npx -y firebase-tools@latest deploy --only firestore --project biz-hannun
 
 이 명령은 Firebase 인증과 해당 프로젝트에 대한 배포 권한이 필요합니다. Pages·Vercel 소스 배포가 Firestore 규칙을 자동으로 적용하지 않습니다. 실제 계정으로 저장 후 새로고침·다른 브라우저의 같은 계정 재로그인을 확인하고 다른 UID의 접근 차단도 확인합니다.
 
-### 국세청 키 미설정
+### 국세청 키 운영과 미설정 복구
 
-활용신청 승인과 앱 서버의 키 등록은 별개입니다. [Vercel 환경변수](https://vercel.com/softms-projects/bizhannun/settings/environment-variables)에 Production `NTS_SERVICE_KEY`를 만들고 일반 인증키(Decoding)를 등록한 뒤 재배포합니다. 현재 기관 API는 Vercel에서 실행하므로 이 키를 GitHub Secret에 추가할 필요는 없습니다. `/api/health`의 `configured`는 키 존재 여부이며 실제 조회 성공은 별도로 확인합니다. 상세 순서는 [AUTH_SETUP.md](AUTH_SETUP.md)에 있습니다.
+2026-10-21 한국 시간 15:21 기준으로 Production `NTS_SERVICE_KEY` 등록·재배포와 실제 단건 상태 조회를 확인했습니다. 이전 `not_configured` 응답은 인증키 등록 전의 검증 기록입니다. 국세청 `/api/health`의 `configured: true`에 더해 `/api/status`의 실제 성공 응답과 Pages 조회 화면까지 확인했으며, 진위 대조·대량 조회까지 운영 검증한 것으로 보지 않습니다.
+
+활용신청 승인과 앱 서버의 키 등록은 별개입니다. 새 환경에서 키가 없거나 교체가 필요하면 [Vercel 환경변수](https://vercel.com/softms-projects/bizhannun/settings/environment-variables)에 Production `NTS_SERVICE_KEY`와 일반 인증키(Decoding)를 등록한 뒤 재배포합니다. 현재 기관 API는 Vercel에서 실행하므로 이 키를 GitHub Secret에 추가할 필요는 없습니다. `/api/health`의 `configured`는 키 존재 여부이며 실제 조회 성공은 별도로 확인합니다. 상세 순서는 [AUTH_SETUP.md](AUTH_SETUP.md)에 있습니다.
 
 ## 8. 수정과 되돌리기
 

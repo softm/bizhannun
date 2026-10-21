@@ -23,12 +23,13 @@ v0.1 초기 검증: 2026-10-20. v0.2 로그인·계정 보관 추가 기록: 202
 | 이메일 로그인 | Console 제공자 활성화, 가입·로그인·재설정·인증 메일 UI와 클라이언트 구현·자동 검사 | 실제 이메일 가입·메일 수신 확인 |
 | 승인된 도메인 | `softm.github.io`, `bizhannun.vercel.app` 등록; 두 origin에서 Google 인증 성공 | 별도 도메인 추가 시 재확인 |
 | 계정 분리 정책 | Console의 `ID 공급업체별로 여러 계정 만들기` 저장; 이메일 자동 병합 없음; 에뮬레이터에서 다른 UID 접근 거부 | 다른 실제 계정·다른 물리 기기 간 검증 |
-| 카카오·네이버 로그인 | OAuth 서버·상태 쿠키·제공자 확인·Custom Token 구현; Vercel 환경변수 메타데이터에서 Production `AUTH_SESSION_SECRET`만 등록된 상태 재확인 | 앱 인증값·Firebase Admin 설정 및 실제 인증 |
+| 카카오·네이버 로그인 | OAuth 서버·상태 쿠키·제공자 확인·Custom Token 구현; SNS 인증 설정 중 Production `AUTH_SESSION_SECRET` 등록 확인 | 앱 인증값·Firebase Admin 설정 및 실제 인증 |
 | 계정 정보 저장 | 운영 프로필 저장·새로고침·별도 origin 복원 확인; 다른 앱 인스턴스의 변경 안내와 최신 기록 불러오기 확인; 테스트 사업체명을 빈 값으로 정리하고 revision 4 저장 성공 | 실제 거래처·메모·조회 이력의 운영 저장 검증 |
 | 기존 기기 자료 이전 | Vercel에서 명시적 가져오기 후 revision 3 저장 성공, 계정의 기존 프로필 유지, 로그아웃 후 기기 프로필 원문 복원 확인 | 거래처 0곳으로 시험했으므로 실제 거래처·사업자번호 중복 사례는 미검증 |
 | 미저장 프로필 보호 | Vercel 비로그인 공간에서 Google 로그인 전 안내, 내 사업으로 돌아온 뒤 입력 보존, 프로필 저장 후 인증 팝업 시작 확인 | 이메일 가입·로그인 등 미검증 인증 흐름은 별도 확인 |
-| v0.2 배포 | 커밋 `6194f8f`의 Pages Actions `39542201349` completed/success; Vercel `dpl_6kocPJjMKx5CXjjxAcva1WHVLLpN` READY·운영 alias, 양쪽 공개 모듈의 로그인 전 가드와 안내 문구 HTTP 확인 | — |
-| 국세청·공정위 | 후속 `/api/health` HTTP 200·Pages CORS 허용, 두 제공자 모두 `configuration: missing_key`·`authentication: not_checked`; 환경변수 메타데이터에서도 미설정 재확인 | Production 키 등록·재배포 후 실제 기관 응답 확인 |
+| v0.2 배포 | 커밋 `6194f8f`의 Pages Actions `39542201349` completed/success, 양쪽 공개 모듈의 로그인 전 가드 확인; 국세청 설정 후 최신 Vercel `dpl_5RrCBZX3GAWbpiXMqm5NJ9hPvjru` READY·운영 alias 확인 | — |
+| 국세청 상태 조회 | Production `NTS_SERVICE_KEY` sensitive 등록·재배포; 2026-10-21 15:21 한국 시간에 실제 `/api/status` 성공 응답과 Pages의 사업자 상태·과세유형 표시 확인 | 진위 대조·대량 조회의 실제 운영 검증 |
+| 공정위 통신판매 조회 | `FTC_SERVICE_KEY` 미설정; `configuration: missing_key`·`authentication: not_checked` | Production 키 등록·재배포 후 실제 기관 응답 확인 |
 
 Firestore Console에서 `bizhannun` 규칙 게시와 새 활성 버전을 확인했습니다. 게시 규칙의 SHA-256은 `32b7854f24bd2a9f28ff7f34fce12730bdeb619a9127a9d69b8b2239c1a8479b`입니다. 규칙 게시, 에뮬레이터 시험, 실제 계정 시험의 범위를 구분합니다.
 
@@ -43,7 +44,7 @@ Firestore Console에서 `bizhannun` 규칙 게시와 새 활성 버전을 확인
 - 로그아웃 후 계정 자료가 화면에서 제거되고 비로그인 공간·로그인 폼으로 돌아오는 것을 확인했습니다.
 - 쿠키 없이 호출한 `/api/config`와 `/api/health`가 HTTP 200을 반환하고 `Access-Control-Allow-Origin: https://softm.github.io`를 제공했습니다.
 
-위 확인 직후에는 브라우저 연결이 끊겨 수정 배포 후의 재로그인·새로고침·다른 기기 조회를 추가 확인하지 못했습니다. 이는 당시 검증의 제한이며, 이후 확인한 범위는 아래 후속 운영 검증에 구분해 기록합니다. 이메일 가입·메일 수신, 카카오·네이버 실제 로그인, 국세청 원천 인증 성공은 아직 완료로 표시하지 않습니다.
+위 확인 직후에는 브라우저 연결이 끊겨 수정 배포 후의 재로그인·새로고침·다른 기기 조회를 추가 확인하지 못했습니다. 이는 당시 검증의 제한이며, 이후 확인한 범위는 아래 후속 운영 검증에 구분해 기록합니다. 이 시점에는 이메일 가입·메일 수신, 카카오·네이버 실제 로그인, 국세청 원천 인증 성공을 확인하지 못했습니다. 국세청의 이후 연결 성공은 별도 절에 기록합니다.
 
 ### 로그인 화면
 
@@ -81,13 +82,30 @@ Vercel에서 확인한 미저장 프로필 로그인 안내:
 
 ![작성 중인 사업 프로필을 먼저 저장하도록 안내하는 로그인 가드](screenshots/profile-login-guard-v02.jpg)
 
-현재 후속 배포의 코드 커밋은 [`6194f8f`](https://github.com/softm/bizhannun/commit/6194f8f8756637e3d7cd17e11f5d72315e6c9970)입니다. [Pages 실행 `39542201349`](https://github.com/softm/bizhannun/actions/runs/39542201349)은 completed/success이며, Vercel 배포 `dpl_6kocPJjMKx5CXjjxAcva1WHVLLpN`의 READY 상태와 `bizhannun.vercel.app` 연결도 확인했습니다. 두 공개 앱 HTML이 참조하는 실제 module URL을 따라가 `blockLoginForProfileDraft`와 한국어 안내 문구가 양쪽 모두 포함된 것을 HTTP로 확인했습니다.
+이 프로필 보호 후속 배포의 코드 커밋은 [`6194f8f`](https://github.com/softm/bizhannun/commit/6194f8f8756637e3d7cd17e11f5d72315e6c9970)입니다. [Pages 실행 `39542201349`](https://github.com/softm/bizhannun/actions/runs/39542201349)은 completed/success이며, 당시 Vercel 배포 `dpl_6kocPJjMKx5CXjjxAcva1WHVLLpN`의 READY 상태와 `bizhannun.vercel.app` 연결도 확인했습니다. 두 공개 앱 HTML이 참조하는 실제 module URL을 따라가 `blockLoginForProfileDraft`와 한국어 안내 문구가 양쪽 모두 포함된 것을 HTTP로 확인했습니다.
 
-후속 `/api/config`와 `/api/health` 요청은 각각 HTTP 200을 반환했고 Pages origin의 CORS를 허용했습니다. 공개 설정은 Google·email의 `configured: true`, kakao·naver의 `configured: false`를 반환했습니다. 기관 상태는 국세청·공정위 모두 `configuration: missing_key`, `authentication: not_checked`였습니다. 제공자 설정 플래그를 실제 이메일·SNS 로그인 성공으로 해석하지 않습니다.
+국세청 키 등록 전의 후속 `/api/config`와 `/api/health` 요청은 각각 HTTP 200을 반환했고 Pages origin의 CORS를 허용했습니다. 공개 설정은 Google·email의 `configured: true`, kakao·naver의 `configured: false`를 반환했습니다. 당시 기관 상태는 국세청·공정위 모두 `configuration: missing_key`, `authentication: not_checked`였습니다. 제공자 설정 플래그를 실제 이메일·SNS 로그인 성공으로 해석하지 않습니다.
 
-Vercel 환경변수 메타데이터에는 Production `AUTH_SESSION_SECRET`만 등록된 것을 재확인했습니다. 국세청·공정위 키, 카카오·네이버 앱 인증값, Firebase Admin 서비스 계정은 미설정 상태입니다. 이 확인은 비밀값 자체나 원천 서비스의 인증 성공을 검사한 결과가 아닙니다.
+이 시점의 Vercel 환경변수 메타데이터에는 Production `AUTH_SESSION_SECRET`만 등록되어 있었습니다. 국세청·공정위 키, 카카오·네이버 앱 인증값, Firebase Admin 서비스 계정은 당시 미설정 상태였습니다. 이 확인은 비밀값 자체나 원천 서비스의 인증 성공을 검사한 결과가 아닙니다. 이후 국세청 키 등록과 실제 조회 결과는 다음 절에 기록합니다.
 
 Vercel 별도 origin에서의 Google 로그인·계정 자료 조회·명시적 가져오기·로그아웃 후 기기 원본 복원을 확인했습니다. 기기와 계정의 테스트 사업체명은 모두 빈 값으로 정리 완료했습니다. 기존 저장 버전이나 기록 전체를 삭제한 것은 아닙니다. 확인 범위는 프로필 중심이며 실제 거래처의 사업자번호 중복 사례는 포함하지 않습니다. 이메일 가입·메일 수신, 카카오·네이버 실제 로그인, 다른 물리 기기, 다른 실제 계정의 분리는 아직 검증하지 않았습니다.
+
+### 2026-10-21 15:21 국세청 운영 연결 확인
+
+한국 시간 2026-10-21 15:21에 기존 Pages 사용자 탭에서 실제 단건 상태 조회를 완료했습니다. 확인 과정은 다음과 같습니다.
+
+1. 공공데이터포털의 해당 국세청 서비스에서 기존 활용 승인을 확인했습니다. 활용신청이 되어 있었지만 앱 서버의 인증키 등록이 빠져 있던 상태였습니다.
+2. 발급된 일반 인증키를 Vercel Production `NTS_SERVICE_KEY`에 sensitive 유형으로 등록했습니다.
+3. 재배포 `dpl_5RrCBZX3GAWbpiXMqm5NJ9hPvjru`의 READY 상태와 공개 운영 alias `bizhannun.vercel.app` 연결을 확인했습니다.
+4. 운영 `/api/health`에서 국세청 `configured: true`를 확인했습니다. 상태 점검은 키 존재 여부만 확인하므로 `authentication: not_checked`와 실제 인증 성공을 구분합니다.
+5. 실제 `/api/status` 요청에서 `outcome: ok`와 사업자 상태·과세유형 등 원천 응답을 받았습니다. 단순 HTTP 200이나 키 존재 확인으로 성공을 판단하지 않았습니다.
+6. 기존 Pages 탭의 `조회하기`를 눌러 계속사업자 상태와 과세유형이 화면에 표시되는 것까지 확인했습니다.
+
+공개 기록에는 조회에 사용한 실제 사업자번호, 사용자 개인정보, 인증키, 개별 조회 결과 화면을 추가하지 않았습니다. 이번 운영 검증은 단건 상태 조회 범위이며, 등록정보 진위 대조·대량 조회·조회 결과의 계정 저장까지 검증한 것으로 확대하지 않습니다. 공정위 `FTC_SERVICE_KEY`, 카카오·네이버 앱 인증값과 Firebase Admin 서비스 계정은 계속 설정 대기입니다.
+
+아래는 개인 조회 정보가 없는 Pages 데이터 현황 화면입니다. 국세청의 `연결 설정됨`과 공정위의 `인증키 설정 필요`를 보여 주며, 실제 단건 조회 성공은 위 API·조회 화면 검증으로 별도 확인했습니다.
+
+![국세청 연결 설정 완료와 공정위 인증키 설정 대기를 표시하는 운영 데이터 현황](screenshots/nts-api-connected-v02.jpg)
 
 ## v0.2 자동 검사 범위
 
@@ -117,7 +135,7 @@ npm run build
 
 ## v0.1 공개 서버 확인
 
-운영 Production 도메인에 로그인 쿠키 없이 요청했습니다.
+v0.1 초기 검증 당시 운영 Production 도메인에 로그인 쿠키 없이 요청했습니다. 아래 `not_configured`와 인증키 미설정 결과는 국세청 키 등록 전의 기록입니다.
 
 | 확인 | 결과 |
 | --- | --- |
@@ -163,6 +181,6 @@ Vercel의 기본 배포 보호는 유지했습니다. 공개 운영 도메인은
 
 v0.2는 Firebase UID별 업무 정보 보관과 로그인 전 기기 자료의 명시적 이전을 구현합니다. 비로그인 IndexedDB 공간을 유지하고 계정 자료와 분리합니다. 원격 변경을 감지하면 최신 기록을 불러오도록 안내하며 충돌을 무조건 덮어쓰지 않습니다. 팀 공동 작업, SNS 계정 자동 병합, 백그라운드 거래처 모니터링은 포함되지 않습니다.
 
-국세청·공정위 원천 조회는 API 활용 승인과 서버 환경변수 설정 후 실제 인증 응답을 확인해야 합니다. 활용신청만으로 Vercel에 인증키가 등록되는 것은 아닙니다. [AUTH_SETUP.md](AUTH_SETUP.md)에 Production `NTS_SERVICE_KEY` 등록·재배포 절차를 안내합니다.
+국세청 상태 조회는 Production 인증키 등록·재배포와 실제 단건 API 응답·Pages 화면 확인을 완료했습니다. 공정위 원천 조회는 아직 인증키 설정과 실제 응답 확인이 필요합니다. 활용신청만으로 Vercel에 인증키가 등록되는 것은 아닙니다. 새 환경 구성·키 교체 시에는 [AUTH_SETUP.md](AUTH_SETUP.md)의 등록·재배포·실제 조회 확인 절차를 따릅니다.
 
 Pages 공개 목록 수집·배포는 매일 한국 시간 06:17로 예약되어 있습니다. Vercel은 소스 직접 배포 방식이며 GitHub App 연동이 없어 Git push만으로 API가 갱신되지는 않습니다. Firestore 규칙 역시 Pages 배포와 별도로 대상 데이터베이스에 적용합니다.

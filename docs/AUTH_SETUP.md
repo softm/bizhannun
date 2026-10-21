@@ -57,13 +57,17 @@ Enterprise Native 데이터베이스 `bizhannun`은 `asia-northeast3`에 실시�
 
 Vercel에는 `AUTH_SESSION_SECRET`, Firebase 서버 서비스 계정, `KAKAO_CLIENT_ID`·`KAKAO_CLIENT_SECRET`, `NAVER_CLIENT_ID`·`NAVER_CLIENT_SECRET`을 필요한 제공자 범위에 맞게 설정합니다. Firebase 서버 서비스 계정의 프로젝트는 웹 앱 설정의 `biz-hannun`과 일치해야 합니다.
 
-2026-10-21 한국 시간에 Vercel 환경변수 메타데이터를 다시 확인했으며, Production `AUTH_SESSION_SECRET`만 등록된 상태입니다. Firebase Admin 서비스 계정과 카카오·네이버 앱 인증값은 아직 등록하지 않았으므로 해당 로그인은 설정 대기입니다. 후속 `/api/config` HTTP 200 응답에서도 Google·email은 `configured: true`, kakao·naver는 `configured: false`였고 Pages origin의 CORS 허용을 확인했습니다. 설정이 끝나면 Production을 새로 배포하고 실제 제공자 인증과 자료 저장을 확인합니다.
+2026-10-21 한국 시간 기준으로 SNS 인증에 필요한 설정 중 Production `AUTH_SESSION_SECRET`을 등록했습니다. Firebase Admin 서비스 계정과 카카오·네이버 앱 인증값은 아직 등록하지 않았으므로 해당 로그인은 설정 대기입니다. 후속 `/api/config` HTTP 200 응답에서도 Google·email은 `configured: true`, kakao·naver는 `configured: false`였고 Pages origin의 CORS 허용을 확인했습니다. 같은 날 국세청 조회용 `NTS_SERVICE_KEY`를 추가했지만 SNS 로그인 설정과는 별개입니다. SNS 설정이 끝나면 Production을 새로 배포하고 실제 제공자 인증과 자료 저장을 확인합니다.
 
 ## 4. “국세청 API 인증키가 설정되지 않았습니다” 해결
 
 **공공데이터포털 활용신청과 앱 서버에 인증키를 등록하는 것은 별개의 단계입니다.** 이 메시지는 현재 실행 중인 API 서버가 `NTS_SERVICE_KEY` 또는 대체키 `DATA_GO_KR_SERVICE_KEY`를 읽지 못했다는 뜻입니다. 활용신청 승인 여부 자체를 조회한 결과가 아닙니다.
 
-2026-10-21 한국 시간에 Vercel 환경변수 메타데이터에서 국세청·공정위 인증키가 아직 등록되지 않은 상태를 다시 확인했습니다. 후속 `/api/health`도 HTTP 200·Pages CORS 허용과 함께 두 제공자의 `configuration: missing_key`, `authentication: not_checked`를 반환했습니다. 아래 Production 환경변수 등록과 재배포가 필요합니다. 현재 API는 Vercel에서 실행하므로 이 키를 GitHub Secret에 추가할 필요는 없습니다.
+2026-10-21 한국 시간 15:21에 **국세청 운영 연결과 실제 단건 상태 조회를 확인했습니다.** 공공데이터포털에서 해당 서비스의 기존 활용 승인을 확인하고, 발급된 일반 인증키를 Vercel Production의 `NTS_SERVICE_KEY`에 sensitive 유형으로 등록했습니다. 재배포 `dpl_5RrCBZX3GAWbpiXMqm5NJ9hPvjru`의 READY 상태와 `bizhannun.vercel.app` 연결을 확인했습니다. `/api/health`의 국세청 `configured: true`, 실제 `/api/status`의 `outcome: ok`, Pages 조회 화면의 사업자 상태·과세유형 표시까지 확인했습니다. 이때 사용한 실제 사업자번호·인증키·개별 조회 결과 화면은 공개 문서에 보관하지 않습니다.
+
+이보다 앞선 `missing_key`·`not_configured` 기록은 키 등록 전의 상태입니다. 공정위 `FTC_SERVICE_KEY`는 아직 미설정입니다. `/api/health`의 `authentication: not_checked`는 상태 점검만으로 기관 인증을 시도하지 않는다는 뜻이며, 위 국세청 인증 성공은 별도의 실제 조회 요청으로 확인했습니다. 현재 기관 API는 Vercel에서 실행하므로 이 키를 GitHub Secret에 추가할 필요는 없습니다.
+
+새 환경을 구성하거나 인증키를 교체할 때는 다음 순서로 확인합니다.
 
 1. [국세청 사업자등록정보 진위확인 및 상태조회 서비스](https://www.data.go.kr/data/15081808/openapi.do)에서 신청한 계정의 활용 상태와 발급된 인증키를 확인합니다.
 2. [Vercel 환경변수 설정](https://vercel.com/softms-projects/bizhannun/settings/environment-variables)에서 `NTS_SERVICE_KEY`를 추가합니다. 값은 발급된 **일반 인증키(Decoding)**를 사용하고 Production 범위에 등록합니다. 이 구현은 디코딩 키와 퍼센트 인코딩된 키를 한 번만 인코딩하여 처리합니다.
