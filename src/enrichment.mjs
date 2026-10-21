@@ -133,7 +133,7 @@ export function normalizeEnrichment(input) {
   const collection = object(input.collection) ? {
     status: ['success', 'partial', 'failed', 'not_collected', 'not_configured'].includes(input.collection.status) ? input.collection.status : 'not_collected',
     lastAttemptAt: timestamp(input.collection.lastAttemptAt), lastSuccessAt: timestamp(input.collection.lastSuccessAt),
-    sourceStatuses: (Array.isArray(input.collection.sourceStatuses) ? input.collection.sourceStatuses.slice(0, 30) : []).filter(object).map(value => ({
+    sourceStatuses: (Array.isArray(input.collection.sourceStatuses) ? input.collection.sourceStatuses.slice(0, 80) : []).filter(object).map(value => ({
       provider: safeText(value.provider, 50), insuranceType: safeText(value.insuranceType, 10), label: safeText(value.label, 100),
       sourceUrl: safeEnrichmentUrl(value.sourceUrl), checkedAt: timestamp(value.checkedAt),
       status: ['success','partial','not_found','not_configured','identity_mismatch','error'].includes(value.status) ? value.status : 'error',
@@ -231,7 +231,13 @@ export async function loadEnrichmentCatalog({ fetcher = globalThis.fetch,
   const meta = { status: safeText(inputMeta.status, 50) || 'available',
     generatedAt: timestamp(inputMeta.generatedAt), collectedAt: timestamp(inputMeta.collectedAt),
     loadedCount: records.length, inputCount: data.businesses.length,
-    excludedCount: data.businesses.length - records.length };
+    excludedCount: data.businesses.length - records.length,
+    lastAttemptAt: timestamp(inputMeta.lastAttemptAt), lastSuccessAt: timestamp(inputMeta.lastSuccessAt),
+    schedule: object(inputMeta.schedule) ? { label:safeText(inputMeta.schedule.label,100), cron:safeText(inputMeta.schedule.cron,50), timezone:safeText(inputMeta.schedule.timezone,50) } : null,
+    attemptedCount: Number.isSafeInteger(inputMeta.attemptedCount) ? inputMeta.attemptedCount : null,
+    sourceCount: records.reduce((sum,record)=>sum+record.sources.length,0),
+    fieldCount: records.reduce((sum,record)=>sum+summarizeEnrichment(record).fieldCount,0),
+  };
   return { records, meta };
 }
 

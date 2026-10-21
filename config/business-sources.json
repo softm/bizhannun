@@ -7,7 +7,12 @@
       "website": "https://bizno.net/article/6901100416",
       "channel": "directory",
       "search": true,
-      "verifiedDomain": false
+      "verifiedDomain": false,
+      "sourceUrls": [
+        "https://korean.visitkorea.or.kr/detail/ms_detail.do?cotid=270b6eaa-db08-47a6-8ae0-ba30b9abd507",
+        "https://www.instagram.com/octobaksok/",
+        "https://blog.naver.com/totanns/223457807589"
+      ]
     },
     {
       "businessNumber": "2208162517",
@@ -15,7 +20,12 @@
       "website": "https://www.navercorp.com/",
       "channel": "website",
       "search": true,
-      "verifiedDomain": true
+      "verifiedDomain": true,
+      "sourceUrls": [
+        "https://www.navercorp.com/company/contact",
+        "https://www.navercorp.com/service/featuredServices",
+        "https://center.shopping.naver.com/"
+      ]
     }
   ]
 }

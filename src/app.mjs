@@ -3,12 +3,13 @@ import { emptyWorkspace, loadWorkspace, saveWorkspace, downloadText, validateBac
 import { callApi, validateApiBase, failureResult } from './api-client.mjs';
 import { loadPrograms, rankPrograms } from './programs.mjs';
 import { loadEnrichmentIndex, summarizeEnrichment } from './enrichment.mjs';
-import { renderEnrichment, enrichmentNote } from './enrichment-view.mjs';
-import { resolveBusinessProfile } from './business-profile.mjs';
+import { renderEnrichment } from './enrichment-view.mjs';
+import { resolveBusinessProfile, attachPartnerEnrichment, derivePartnerProfile, setPartnerName } from './business-profile.mjs';
 import { buildBusinessInsights } from './business-insights.mjs';
 import { renderBusinessInsights } from './business-insights-view.mjs';
 import { classifyBusinessQuery, buildBusinessSearchIndex, searchBusinesses } from './business-search.mjs';
 import { renderBusinessSearch } from './business-search-view.mjs';
+import { renderCollectionDashboard, buildBusinessProfileDraft, evidenceChanges } from './business-dashboard.mjs';
 import { createAuthClient } from './auth.mjs';
 import { createCloudWorkspace, mergeGuestWorkspace } from './cloud-storage.mjs';
 
@@ -110,11 +111,25 @@ const modalRoot = document.getElementById('modal-root');
 const currentApiBase = () => window.BIZHANNUN_CONFIG?.mode === 'direct' ? '' : workspace.preferences?.apiBase || window.BIZHANNUN_CONFIG?.apiBase || '';
 const byId = id => workspace.partners.find(p=>p.id===id);
 const byNumber = n => workspace.partners.find(p=>p.businessNumber===n);
+const businessView = (partner) => {
+  const ownRecord=[ui.profileDraft?.enrichment,workspace.profile?.enrichment].find(record=>record?.businessNumber===partner.businessNumber);
+  return derivePartnerProfile({...partner,...(!partner.enrichment&&ownRecord?{enrichment:ownRecord}:{})}, publicRecords.get(partner.businessNumber) || null);
+};
+const businessRecord = value => {
+  const bno=normalizeBusinessNumber(value);
+  return businessView(byNumber(bno) || {businessNumber:bno,name:''}).record;
+};
+function linkedPartners(partners) {
+  return partners.map(partner => {
+    const record = publicRecords.get(partner.businessNumber);
+    return record ? attachPartnerEnrichment(partner, record) : partner;
+  });
+}
 const linkedBusiness = (businessNumber, partner=byNumber(normalizeBusinessNumber(businessNumber))) => resolveBusinessProfile({
-  businessNumber, partner, record:publicRecords.get(normalizeBusinessNumber(businessNumber)),
+  businessNumber, partner, record:businessRecord(businessNumber),
   summary:publicSummaries.get(normalizeBusinessNumber(businessNumber))
 });
-const publicBusiness = bno => ({record:publicRecords.get(normalizeBusinessNumber(bno))||null,summary:publicSummaries.get(normalizeBusinessNumber(bno))||null,meta:publicMeta});
+const publicBusiness = bno => { const record=businessRecord(bno); return {record,summary:record?summarizeEnrichment(record):null,meta:publicMeta}; };
 const insightModel = (bno, check=null) => buildBusinessInsights({businessNumber:bno,partner:byNumber(bno)||null,check,summary:linkedBusiness(bno).summary});
 const publicNameLine = profile => profile.publicName && profile.userName && profile.publicName!==profile.userName ? `<span class="subline public-name">공개 상호 · ${esc(profile.publicName)}</span>` : '';
 const getSourceName = source => typeof source === 'string' ? source : source?.name || '국세청';
@@ -506,6 +521,7 @@ function programCard(item) {
 function profileView() {
   const p=ui.profileDraft||workspace.profile;
   return pageHeading('내 사업을 알려주세요','공개정보로 채워지지 않는 항목을 보완하면, 기회를 찾기 쉬워져요.')+`
+  ${p.enrichment?`<div class="callout profile-evidence-note">${icon('link')}<span>공개자료에서 확인한 정보를 함께 보관합니다. 아래 값을 검토하고 프로필을 저장하세요. <button class="text-button" data-action="profile-evidence" data-business-number="${esc(p.businessNumber)}">출처 ${p.enrichment.sources.length}곳 확인</button></span></div>`:''}
   <div class="profile-layout"><form id="profile-form" class="card form-card">
   <div class="section-row"><h2 class="section-title">사업 프로필</h2><span class="mode-label">${authState.user?'내 계정에 저장':'이 기기에 저장'}</span></div>
   <div class="form-grid">
@@ -530,23 +546,28 @@ function historyView() {
   </section><section class="card"><div class="card-header"><h2>일괄 확인 기록</h2></div>${workspace.checks.length?`<div class="timeline">${workspace.checks.slice(0,15).map(c=>`<div class="timeline-item"><span class="timeline-icon">${icon('check')}</span><div class="timeline-content"><h3>${number(c.total)}곳 상태 확인</h3><p>응답 확인 ${number(c.ok)} · 미확인/실패 ${number(c.failed)}<br>${esc(fmtTime(c.checkedAt))}</p></div></div>`).join('')}</div>`:empty('file','첫 확인 기록을 기다리고 있어요','거래처 관리에서 전체 또는 선택한 거래처의 상태를 확인해 보세요.',`<a class="button light small" href="./#partners" data-nav="partners">거래처 관리</a>`)}</section></div>`;
 }
 function publicCollectionView() {
-  const records=[...publicRecords.values()];
-  const latest=values=>values.filter(v=>Number.isFinite(Date.parse(v))).sort().at(-1)||null;
-  const attemptedAt=latest(records.map(r=>r.collection?.lastAttemptAt));
-  const succeededAt=latest(records.map(r=>r.collection?.lastSuccessAt));
-  const label={success:'수집 완료',partial:'일부 수집',failed:'최근 수집 실패',not_collected:'미수집',not_configured:'연결 설정 대기'};
-  const sourceLabel={success:'수집 완료',partial:'일부 수집',not_found:'해당 원천 자료 없음',not_configured:'인증키 설정 대기',identity_mismatch:'번호 불일치',error:'활용승인·연결 확인 필요'};
-  return `<section class="card public-collection-panel section-spacer" aria-label="사업자 공개정보 수집 현황"><div class="card-header"><div><h2>사업자 공개정보 수집 현황</h2><p class="fine-print">등록된 수집 대상만 갱신합니다. 전국 사업자를 모두 확보한 목록은 아닙니다.</p></div><button class="button small" data-action="reload-enrichment">수집본 새로고침</button></div><div class="collection-highlights"><div><span>자동 수집 주기</span><strong>매일 06:17</strong><small>한국시간 · 추가 수집 요청 시에도 실행</small></div><div><span>마지막 수집 시도</span><strong>${esc(fmtTime(attemptedAt))}</strong><small>수집본에 기록된 실제 시도 시각</small></div><div><span>마지막 성공 수집</span><strong>${esc(fmtTime(succeededAt))}</strong><small>업체별 성공 시각은 아래 표에서 확인</small></div></div>
-  ${publicIndexLoading?'<p class="inline-loading"><span class="spinner"></span> 공개자료 현황을 불러오고 있습니다.</p>':''}${publicIndexError?`<p class="insight-notice is-attention">${esc(publicIndexError)}</p>`:''}
-  <div class="table-wrap"><table><thead><tr><th>사업자 · 연결 상호</th><th>확인 항목</th><th>수집 결과</th><th>마지막 성공</th><th>마지막 시도</th></tr></thead><tbody>${records.map(record=>{const linked=linkedBusiness(record.businessNumber),summary=linked.summary;return `<tr><td><strong>${esc(linked.publicName||'상호 미확인')}</strong><span class="subline number">${formatBusinessNumber(record.businessNumber)}</span></td><td>${summary?.fieldCount||0}개 · ${summary?.confirmedCount||0}개 출처</td><td><span class="badge ${['failed','partial'].includes(record.collection?.status)?'warning':'neutral'}">${esc(label[record.collection?.status]||'미확인')}</span></td><td>${esc(fmtTime(record.collection?.lastSuccessAt))}</td><td>${esc(fmtTime(record.collection?.lastAttemptAt))}</td></tr>`;}).join('')||'<tr><td colspan="5">아직 불러온 사업자 수집본이 없습니다.</td></tr>'}</tbody></table></div>
-  <details class="collection-source-details"><summary>업체별 제공기관 연결 기록</summary>${records.map(record=>`<article><h3>${esc(linkedBusiness(record.businessNumber).displayName)} · ${formatBusinessNumber(record.businessNumber)}</h3>${(record.collection?.sourceStatuses||[]).map(source=>`<p><strong>${esc(source.label)}</strong> · ${esc(sourceLabel[source.status]||'미확인')} · ${esc(fmtTime(source.checkedAt))}${source.message?`<small>${esc(source.message)}</small>`:''}</p>`).join('')||'<p>추가 공공 API 연결 기록이 없습니다.</p>'}</article>`).join('')}</details><div class="card-foot">수집본 ${number(records.length)}곳 · 파일 갱신 ${esc(fmtTime(publicMeta.generatedAt))}${publicMeta.rejectedCount?` · 번호·형식 오류로 제외 ${publicMeta.rejectedCount}건`:''}<br>실패한 수집과 정보가 없는 경우를 구분하고, 기존에 확보한 정보는 해당 출처의 수집 시각과 함께 유지합니다.</div></section>`;
+  return renderCollectionDashboard([...publicRecords.values()],publicMeta,{loading:publicIndexLoading,error:publicIndexError});
 }
+
 function dataView() {
-  const nts=health?.providers?.nts,ftc=health?.providers?.ftc;
+  const nts=health?.providers?.nts;
   const sync=accountStorageStatus();
+  const collectedStatuses=[...publicRecords.values()].flatMap(record=>record.collection?.sourceStatuses||[]);
+  const providerState=(names)=>{
+    const results=collectedStatuses.filter(result=>names.includes(result.provider));
+    if(results.some(result=>result.status==='success'))return {value:'수집 결과 있음',tone:'positive'};
+    if(results.some(result=>result.status==='not_found'))return {value:'조회 완료 · 일치 결과 없음',tone:'neutral'};
+    if(results.some(result=>['error','partial','identity_mismatch'].includes(result.status)))return {value:'최근 수집 기록 확인',tone:'warning'};
+    return {value:results.length?'연동 설정 필요':publicIndexLoading?'수집 기록 확인 중':'수집 기록 없음',tone:'neutral'};
+  };
   const rows=[
     {name:'국세청 · 사업자등록정보',description:'계속·휴업·폐업 상태, 과세유형, 입력 등록정보 진위 대조',url:'https://www.data.go.kr/data/15081808/openapi.do',value:nts?.configured?'연결 설정됨':health?'인증키 설정 필요':'서버 연결 확인 필요',tone:nts?.configured?'positive':'neutral'},
-    {name:'공정거래위원회 · 통신판매업',description:'사업자번호가 정확히 일치하는 공개 등록정보',url:'https://www.data.go.kr/data/15126315/openapi.do',value:ftc?.configured?'연결 설정됨':health?'인증키 설정 필요':'서버 연결 확인 필요',tone:ftc?.configured?'positive':'neutral'},
+    {name:'공정거래위원회 · 통신판매업',description:'사업자번호가 정확히 일치하는 공개 등록정보 · 정기 수집',url:'https://www.data.go.kr/data/15126315/openapi.do',...providerState(['ftc'])},
+    {name:'근로복지공단 · 고용·산재보험',description:'사업장명·주소·보험 기준 인원과 성립일 · 정기 수집',url:'https://www.data.go.kr/data/15059256/openapi.do',...providerState(['comwel'])},
+    {name:'OpenDART · 기업개황',description:'공시 대상 기업의 회사 정보 · 응답 사업자번호 대조',url:'https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS001&apiId=2019002',...providerState(['dart'])},
+    {name:'금융위원회 · 기업기본정보',description:'법인 기본정보 · 상호 검색 후 사업자번호 대조',url:'https://www.data.go.kr/data/15043184/openapi.do',...providerState(['fsc'])},
+    {name:'네이버 검색 · 뉴스·블로그·지역',description:'상호 기반 공개 검색 결과 · 확인 후보로 보관',url:'https://developers.naver.com/docs/serviceapi/search/local/local.md',...providerState(['naver_news','naver_blog','naver_local'])},
+    {name:'카카오 로컬 · 장소 검색',description:'상호·주소·업무 전화 등 장소 후보 · 사업자 동일성 추가 확인',url:'https://developers.kakao.com/docs/latest/ko/local/dev-guide',...providerState(['kakao_local'])},
     {name:'지원한눈 · 공개 지원사업 목록',description:'기존 공개 공고의 제목·지역·분야·일정·원문 링크 연결',url:'https://softm.github.io/softm.policyfundfinder/',value:programLoading?'불러오는 중':programs.length?number(programs.length)+'건':'수집 결과 없음',tone:programs.length?'positive':'neutral'}
   ];
   return pageHeading('데이터는 투명하게, 판단은 정확하게','실제 연결 상태와 수집 결과, 데이터의 출처·기준일을 확인하세요.',`<div class="button-row"><button class="button" data-action="refresh-health">${icon('refresh')} 상태 새로고침</button></div>`)+`
@@ -567,7 +588,7 @@ function dataView() {
     <tr><td>연결 범위</td><td>${esc(collection.selectionPolicy||programMeta.selectionPolicy||'수집 상태 확인 필요')}${collection.selectionLimit?` · 최대 ${number(collection.selectionLimit)}건`:''}</td></tr>
     <tr><td>제외·누락</td><td>${number(collection.excludedCount||collection.skippedCount||0)}건 · ${esc(collection.message||'수집 상세는 상태 JSON에서 확인')}</td></tr>
   </tbody></table><div class="card-foot"><a class="text-button" href="./data/collection-status.json" target="_blank" rel="noopener">수집 상태 JSON 보기 ${icon('external')}</a></div></section>
-  <section class="card guide-card"><h2 class="section-title">조회 연결</h2><p class="fine-print" style="margin-top:10px">현재 연결 주소</p><p class="mono" style="overflow-wrap:anywhere;margin:8px 0 13px">${esc(window.BIZHANNUN_CONFIG?.mode==='direct'?'브라우저 → 제공기관 직접 호출':currentApiBase()||location.origin+' (동일 서버)')}</p>${healthError?`<div class="callout warning" style="margin-bottom:14px">${icon('info')}<span>${esc(healthError)}</span></div>`:''}<div class="button-row">${window.BIZHANNUN_CONFIG?.mode==='direct'?'':'<button class="button small" data-action="connection-settings">서버 주소 설정</button>'}<button class="button small" data-action="refresh-health">${icon('refresh')} 상태 확인</button></div><p class="fine-print" style="margin-top:13px">${window.BIZHANNUN_CONFIG?.mode==='direct'?'국세청은 브라우저에서 직접 조회합니다. 인증키는 GitHub Secret에서 배포 시 주입하며, 배포된 앱과 요청에서는 확인할 수 있습니다.':'API 인증키는 서버 환경변수에 보관합니다.'}</p><div class="divider"></div><h3 style="font-size:12px">앞으로 연결할 데이터</h3><p class="fine-print" style="margin-top:8px">법인 공개재무·국민연금·업종별 인허가는 대상 식별과 이용 조건을 검증한 뒤 확장합니다. 현재 조회되는 정보로 표시하지 않습니다.</p></section></div>`;
+  <section class="card guide-card"><h2 class="section-title">조회 연결</h2><p class="fine-print" style="margin-top:10px">현재 연결 주소</p><p class="mono" style="overflow-wrap:anywhere;margin:8px 0 13px">${esc(window.BIZHANNUN_CONFIG?.mode==='direct'?'브라우저 → 제공기관 직접 호출':currentApiBase()||location.origin+' (동일 서버)')}</p>${healthError?`<div class="callout warning" style="margin-bottom:14px">${icon('info')}<span>${esc(healthError)}</span></div>`:''}<div class="button-row">${window.BIZHANNUN_CONFIG?.mode==='direct'?'':'<button class="button small" data-action="connection-settings">서버 주소 설정</button>'}<button class="button small" data-action="refresh-health">${icon('refresh')} 상태 확인</button></div><p class="fine-print" style="margin-top:13px">${window.BIZHANNUN_CONFIG?.mode==='direct'?'국세청은 브라우저에서 직접 조회합니다. 인증키는 GitHub Secret에서 배포 시 주입하며, 배포된 앱과 요청에서는 확인할 수 있습니다.':'API 인증키는 서버 환경변수에 보관합니다.'}</p><div class="divider"></div><h3 style="font-size:12px">앞으로 연결할 데이터</h3><p class="fine-print" style="margin-top:8px">기업개황·뉴스·블로그·장소 검색은 출처별 실행 결과를 위 표에 표시합니다. 국민연금·공개 재무제표·업종별 인허가는 후속 연계 대상입니다.</p></section></div>`;
 }
 
 
@@ -587,21 +608,39 @@ function closeModal() {
   previousFocus?.isConnected&&previousFocus.focus({preventScroll:true});
 }
 function partnerModal(partner,seed={}) {
-  const p=partner||seed;
-  const linked=linkedBusiness(p.businessNumber,p);
-  openModal(partner?'거래처 정보 수정':'새 거래처 등록',`<form id="partner-form" data-id="${esc(partner?.id||'')}"><div class="form-grid">
+  const base=partner||{...seed,name:seed.name||''};
+  const record=base.businessNumber&&isValidBusinessNumber(base.businessNumber)?businessRecord(base.businessNumber):null;
+  const p=record?attachPartnerEnrichment(base,record):base;
+  openModal(partner?'거래처 정보 수정':'새 거래처 등록',`<form id="partner-form" data-id="${esc(partner?.id||'')}">${p.enrichment?`<div class="callout partner-evidence-note">상호·주소 등 공개정보 ${summarizeEnrichment(p.enrichment).fieldCount}항목을 출처와 함께 저장합니다. 메모는 별도로 유지합니다.</div>`:''}<div class="form-grid">
   <div class="form-field full-span"><label for="partner-number">사업자등록번호 <span class="muted">(필수)</span></label><input id="partner-number" name="businessNumber" inputmode="numeric" maxlength="20" required value="${esc(formatBusinessNumber(p.businessNumber||''))}" ${partner?'readonly':''} placeholder="000-00-00000"><span class="hint">번호 형식 검사는 국세청 상태 조회나 본인 인증과 다릅니다.</span></div>
-  <div class="form-field full-span"><label for="partner-name">거래처 이름·별칭 <span class="muted">(선택)</span></label><input id="partner-name" name="name" maxlength="200" value="${esc(p.name||'')}" placeholder="${esc(linked.publicName||'직접 관리할 이름')}"><span class="hint">${linked.publicName?`비워 두면 번호가 일치하는 공개 상호 <strong>${esc(linked.publicName)}</strong>가 자동 표시됩니다.`:'공개 상호가 수집되면 같은 사업자번호로 자동 연결합니다.'} 직접 입력한 이름은 별도로 보존합니다.</span></div>
+  <div class="form-field full-span"><label for="partner-name">업체명</label><input id="partner-name" name="name" maxlength="200" value="${esc(p.name||'')}" placeholder="공개자료 또는 서류에서 확인한 이름"><span class="hint">${p.nameOrigin?.kind==='public'?'사업자번호에 연결된 공개 상호입니다. 수정하면 사용자 입력 이름으로 보관합니다.':'직접 입력한 이름은 사용자 제공 정보로 저장합니다.'}</span></div>
   <div class="form-field full-span"><label for="partner-tags">태그</label><input id="partner-tags" name="tags" maxlength="500" value="${esc((p.tags||[]).join(', '))}" placeholder="예: 정기 거래, 납품, 확인 필요"></div>
   <div class="form-field full-span"><label for="partner-note">메모</label><textarea id="partner-note" name="note" maxlength="5000" placeholder="다음에 확인할 내용이나 거래처 관련 메모">${esc(p.note||'')}</textarea></div></div><div id="partner-form-error" class="field-error" role="alert"></div><div class="modal-actions">${partner?`<button class="button danger" type="button" data-action="delete-confirm" data-id="${esc(partner.id)}">${icon('trash')} 삭제</button>`:''}<button class="button" type="button" data-action="close-modal">취소</button><button class="button primary" type="submit">${icon('check')} 저장</button></div></form>`);
+  modal.prefilledName={value:p.name||'',automatic:p.nameOrigin?.kind==='public'};
+}
+
+function openProfileEvidence(value) {
+  const bno=normalizeBusinessNumber(value);
+  if(!isValidBusinessNumber(bno))return;
+  const record=businessRecord(bno),p=ui.profileDraft||workspace.profile;
+  if(!record)return;
+  const connected=derivePartnerProfile({businessNumber:bno,name:p.name||'',enrichment:record});
+  const body=renderEnrichment({businessNumber:bno,record:connected.record,summary:connected.summary,name:connected.name,compact:true});
+  if(modal?.profileEvidence&&modal.businessNumber===bno){
+    const target=modalRoot.querySelector('.modal-body');
+    if(target){const scroll=target.scrollTop;target.innerHTML=body;target.scrollTop=scroll;modal.body=body;}
+  }else openModal('내 사업 공개자료 출처',body,true);
+  modal.profileEvidence=true;modal.businessNumber=bno;
 }
 function detailModal(partner,{refresh=false}={}) {
   if(!partner)return;
   const last=partner.lastCheck,success=partner.lastSuccess;
   const linked=linkedBusiness(partner.businessNumber,partner);
+  const changes=evidenceChanges(partner.enrichment,publicRecords.get(partner.businessNumber));
   const body=`<div class="profile-summary"><span class="company-avatar">${esc(linked.displayName.slice(0,1))}</span><div><h2>${esc(linked.displayName)}</h2><p class="number">${formatBusinessNumber(partner.businessNumber)}</p>${publicNameLine(linked)}</div><div class="profile-status">${badge(last)}</div></div>
   <dl class="detail-grid"><div class="detail-fact"><dt>마지막 성공 조회의 상태</dt><dd>${esc(success?.statusLabel||'미확인')}<small>${esc(fmtTime(success?.checkedAt))}</small></dd></div><div class="detail-fact"><dt>과세유형</dt><dd>${esc(success?.taxType||'미확인')}</dd></div><div class="detail-fact"><dt>표시 이름의 출처</dt><dd>${esc(linked.nameSourceLabel)}<small>${linked.nameSourceUrl?external(linked.nameSourceUrl,'상호 출처 확인'):linked.userName?'직접 입력한 관리용 이름입니다.':'사업자번호가 일치하는 공개 상호를 기다리고 있습니다.'}${linked.nameCollectedAt?' · '+esc(fmtTime(linked.nameCollectedAt)):''}</small></dd></div><div class="detail-fact"><dt>거래처 등록일</dt><dd>${esc(fmtDate(partner.createdAt))}</dd></div></dl>
   ${businessInsightView(partner.businessNumber,last,true)}
+  ${changes.length?`<div class="callout warning"><span>보관한 자료와 현재 공개 수집본의 값이 ${changes.length}항목 다릅니다.${changes.map(change=>`<br>${esc(change.label)}: ${esc(change.before)} → ${esc(change.after)}`).join('')}<br>실제 변경일은 원문에서 확인하세요.</span></div>`:''}
   ${businessInformation(partner.businessNumber)}
   <div class="divider"></div><div class="section-row"><h3>내 거래 메모</h3><div class="chip-list">${(partner.tags||[]).map(t=>`<span class="badge neutral">${esc(t)}</span>`).join('')}</div></div><p class="partner-note">${esc(partner.note||'등록된 메모가 없습니다.')}</p>
   <div class="divider"></div><h3 class="section-title">최근 조회 이력</h3>
@@ -768,7 +807,7 @@ async function lookup(value,{candidate=null}={}) {
   interactionEpoch++;
   ui.lookupError='';ui.nameSearchBusy=false;ui.lookupSelection=candidate;
   ui.lookupBusy=true;ui.lookup=null;ui.commerce=null;ui.enrichment=null;ui.enrichmentError='';ui.enrichmentBusy=true;render();
-  void refreshEnrichment(bno,serial);
+  const evidenceTask=refreshEnrichment(bno,serial);
   try {
     const result=await callApi('status',{businessNumbers:[bno]},currentApiBase());
     if(serial!==lookupSerial)return;
@@ -778,10 +817,11 @@ async function lookup(value,{candidate=null}={}) {
     if(serial!==lookupSerial)return;
     ui.lookup=failureResult(bno,error);
   } finally {if(serial===lookupSerial){ui.lookupBusy=false;render();if(candidate&&ui.view==='lookup'){document.getElementById('lookup-result-title')?.focus({preventScroll:true});document.getElementById('lookup-result')?.scrollIntoView({block:'nearest',behavior:'instant'});}}}
+  await evidenceTask;
   if(serial!==lookupSerial)return;
   if(byNumber(bno)) {
     const applied=applyCheckResults(workspace.partners,[ui.lookup]);
-    await persist({...workspace,partners:applied.partners,events:dedupeEvents(workspace.events,applied.events)});
+    await persist({...workspace,partners:linkedPartners(applied.partners),events:dedupeEvents(workspace.events,applied.events)});
   }
   if(serial!==lookupSerial)return;
   if(health?.providers?.ftc?.configured) {
@@ -797,6 +837,8 @@ async function batchCheck(ids) {
   ui.batchBusy=true;ui.batchTotal=targets.length;ui.batchDone=0;render();
   const all=[];
   try {
+    await refreshPublicIndex();
+    if(epoch!==accountEpoch)return;
     for(let offset=0;offset<targets.length;offset+=100) {
       const chunk=targets.slice(offset,offset+100);
       let results;
@@ -807,7 +849,7 @@ async function batchCheck(ids) {
       if(epoch!==accountEpoch)return;
       all.push(...results);
       const applied=applyCheckResults(workspace.partners,results);
-      const saved=await persist({...workspace,partners:applied.partners,events:dedupeEvents(workspace.events,applied.events)});
+      const saved=await persist({...workspace,partners:linkedPartners(applied.partners),events:dedupeEvents(workspace.events,applied.events)});
       if(epoch!==accountEpoch)return;
       ui.batchDone+=chunk.length;render();
       if(!saved)break;
@@ -832,7 +874,11 @@ async function savePartner(form) {
   const duplicate=byNumber(bno);
   if(duplicate&&duplicate.id!==old?.id){error.textContent='이미 등록한 사업자번호입니다. 기존 거래처 정보를 수정해 주세요.';return;}
   if(!old&&workspace.partners.length>=1000){error.textContent='거래처는 최대 1,000개까지 저장할 수 있습니다.';return;}
-  let p={...old,id:old?.id||crypto.randomUUID(),businessNumber:bno,name:String(data.get('name')||'').trim().slice(0,200),tags:[...new Set(String(data.get('tags')||'').split(/[,;|]/).map(t=>t.trim()).filter(Boolean))].slice(0,10),note:String(data.get('note')||'').slice(0,5000),createdAt:old?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),history:old?.history||[]};
+  let p={...old,id:old?.id||crypto.randomUUID(),businessNumber:bno,name:old?.name||'',tags:[...new Set(String(data.get('tags')||'').split(/[,;|]/).map(t=>t.trim()).filter(Boolean))].slice(0,10),note:String(data.get('note')||'').slice(0,5000),createdAt:old?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),history:old?.history||[]};
+  const evidence=businessRecord(bno);
+  if(evidence)p=attachPartnerEnrichment(p,evidence);
+  const enteredName=String(data.get('name')||'').trim();
+  if(!modal?.prefilledName?.automatic||enteredName!==modal.prefilledName.value)p=setPartnerName(p,enteredName);
   if(ui.lookup?.businessNumber===bno&&!old) p=applyCheckResults([p],[ui.lookup]).partners[0];
   const partners=old?workspace.partners.map(item=>item.id===old.id?p:item):[p,...workspace.partners];
   if(await persist({...workspace,partners})){closeModal();toast('거래처를 저장했습니다.');}
@@ -852,7 +898,8 @@ async function saveProfile(form) {
     region:String(data.get('region')||''),industry:String(data.get('industry')||'').trim(),
     foundedAt:String(data.get('foundedAt')||''),businessKind:String(data.get('businessKind')||''),
     employees,revenue,revenueUnit:'만원',revenueYear,
-    interests:data.getAll('interests').map(String),providedBy:'user',updatedAt:new Date().toISOString()
+    interests:data.getAll('interests').map(String),providedBy:'user',updatedAt:new Date().toISOString(),
+    ...((ui.profileDraft||workspace.profile).enrichment?.businessNumber===normalizeBusinessNumber(raw)?{enrichment:(ui.profileDraft||workspace.profile).enrichment}:{})
   };
   if(await persist({...workspace,profile})){ui.profileDraft=null;render();toast('내 사업 프로필을 저장했습니다.');}
 }
@@ -900,7 +947,9 @@ document.addEventListener('submit',async event=>{
 });
 function captureProfileDraft(form) {
   const data=new FormData(form);
-  ui.profileDraft={...Object.fromEntries(data),interests:data.getAll('interests').map(String)};
+  const previous=ui.profileDraft||workspace.profile;
+  const bno=normalizeBusinessNumber(String(data.get('businessNumber')||''));
+  ui.profileDraft={...Object.fromEntries(data),businessNumber:bno,interests:data.getAll('interests').map(String),...(previous.enrichment?.businessNumber===bno?{enrichment:previous.enrichment}:{})};
 }
 document.addEventListener('input',event=>{
   const t=event.target;
@@ -996,30 +1045,36 @@ document.addEventListener('click',async event=>{
   if(action==='add-partner'){partnerModal();return;}
   if(action==='edit-partner'){partnerModal(byId(id));return;}
   if(action==='detail'){detailModal(byId(id));return;}
-  const contextBno=normalizeBusinessNumber(element.dataset.bno||byId(modal?.detailId)?.businessNumber||ui.lookup?.businessNumber||'');
+  const contextBno=normalizeBusinessNumber(element.dataset.businessNumber||element.dataset.bno||byId(modal?.detailId)?.businessNumber||ui.lookup?.businessNumber||'');
+  if(action==='reload-catalog'){await refreshPublicIndex({force:true});return;}
   if(action==='reload-enrichment'){
+    const activeModal=modal, profileEvidence=modal?.profileEvidence;
     if(isValidBusinessNumber(contextBno))await refreshEnrichment(contextBno,lookupSerial,{force:true});
     else await refreshPublicIndex({force:true});
-    return;
+    if(profileEvidence&&modal===activeModal)openProfileEvidence(contextBno);
+    toast(publicIndexError||'배포된 최신 수집본을 확인했습니다. 웹 재수집은 수집 요청에서 실행합니다.',!!publicIndexError);return;
   }
   if(action==='enrichment-export'){
-    const data=publicBusiness(contextBno);
-    if(data.record)downloadText('사업자한눈_공개정보_'+contextBno+'.json',JSON.stringify(data.record,null,2),'application/json');
-    return;
+    const record=businessRecord(contextBno);
+    if(record)downloadText('사업자한눈_공개정보_'+contextBno+'.json',JSON.stringify(record,null,2),'application/json');return;
   }
   if(action==='save-enrichment-note'){
-    const summary=linkedBusiness(contextBno).summary;
-    if(!summary)return;
-    const old=byNumber(contextBno),publicNote=enrichmentNote(summary);
-    const note=old?.note?.includes(publicNote)?old.note:[old?.note,publicNote].filter(Boolean).join('\n\n');
-    if(note.length>5000){toast('기존 메모와 공개자료를 합치면 5,000자를 초과합니다. 수집 자료 JSON을 보관해 주세요.',true);return;}
-    partnerModal(old?{...old,note}:null,{businessNumber:contextBno,name:'',note});return;
+    const record=businessRecord(contextBno);if(!record)return;
+    const old=byNumber(contextBno);
+    if(old){
+      const activeModal=modal;
+      if(await persist({...workspace,partners:workspace.partners.map(p=>p.id===old.id?attachPartnerEnrichment(p,record):p)})){
+        if(modal===activeModal&&modal?.detailId===old.id)detailModal(byId(old.id),{refresh:true});
+        toast('공개정보와 출처를 거래처에 보관했습니다.');
+      }
+    }else partnerModal(null,{businessNumber:contextBno});
+    return;
   }
   if(action==='enrichment-request'){enrichmentRequestModal(contextBno);return;}
   if(action==='save-lookup'){
-    if(ui.lookup)partnerModal(byNumber(ui.lookup.businessNumber),{businessNumber:ui.lookup.businessNumber,name:''});
-    return;
+    if(ui.lookup)partnerModal(byNumber(ui.lookup.businessNumber),{businessNumber:ui.lookup.businessNumber});return;
   }
+  if(action==='profile-evidence'){openProfileEvidence(contextBno);return;}
   if(action==='insight-refresh-status'){
     if(!isValidBusinessNumber(contextBno))return;
     const partner=byNumber(contextBno);
@@ -1038,11 +1093,9 @@ document.addEventListener('click',async event=>{
   }
   if(action==='use-mine'){
     if(!ui.lookup)return;
-    const linked=linkedBusiness(ui.lookup?.businessNumber), facts=linked.summary?.profile||{};
-    const existing=normalizeBusinessNumber(workspace.profile.businessNumber)===ui.lookup.businessNumber?workspace.profile:{};
-    const addressRegion=Object.entries({'서울':'서울','부산':'부산','대구':'대구','인천':'인천','광주':'광주','대전':'대전','울산':'울산','세종':'세종','경기도':'경기','강원':'강원','충청북도':'충북','충청남도':'충남','전북':'전북','전라북도':'전북','전라남도':'전남','경상북도':'경북','경상남도':'경남','제주':'제주'}).find(([prefix])=>facts.address?.startsWith(prefix))?.[1]||'';
-    ui.profileDraft={...existing,businessNumber:ui.lookup.businessNumber,name:linked.publicName||existing.name||'',industry:facts.businessCategory||facts.industry||existing.industry||'',region:addressRegion||existing.region||''};
-    go('profile');toast('연결된 정보로 입력했습니다. 내용을 확인한 뒤 내 사업 프로필을 저장해 주세요.');return;
+    const bno=ui.lookup.businessNumber;
+    ui.profileDraft=buildBusinessProfileDraft(ui.profileDraft||workspace.profile,bno,businessRecord(bno));
+    go('profile');toast('공개정보로 프로필을 채웠습니다. 내용을 확인하고 저장하세요.');return;
   }
   if(action==='check-one'){const epoch=accountEpoch;closeModal();const interaction=interactionEpoch;await batchCheck([id]);if(epoch===accountEpoch&&interaction===interactionEpoch&&!modal&&byId(id))detailModal(byId(id));return;}
   if(action==='batch-check'){await batchCheck(element.dataset.scope==='selected'?[...selected]:workspace.partners.map(p=>p.id));return;}

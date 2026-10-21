@@ -77,6 +77,11 @@ jobs:
         env:
           BUSINESS_PUBLIC_SERVICE_KEY: ${{ secrets.BUSINESS_PUBLIC_SERVICE_KEY || secrets.NTS_SERVICE_KEY }}
           FTC_SERVICE_KEY: ${{ secrets.FTC_SERVICE_KEY }}
+          FSC_SERVICE_KEY: ${{ secrets.FSC_SERVICE_KEY || secrets.BUSINESS_PUBLIC_SERVICE_KEY || secrets.NTS_SERVICE_KEY }}
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          NAVER_SEARCH_CLIENT_ID: ${{ secrets.NAVER_SEARCH_CLIENT_ID }}
+          NAVER_SEARCH_CLIENT_SECRET: ${{ secrets.NAVER_SEARCH_CLIENT_SECRET }}
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
         run: node scripts/collect-businesses.mjs
 
       - name: Refresh public support program data
@@ -106,7 +111,7 @@ jobs:
           done < <(git diff --cached --name-only)
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore(data): refresh public support program snapshots"
+          git commit -m "chore(data): refresh business and support program evidence"
           # A concurrent push is rejected normally. Never rebase or force-push
           # code that has not passed this run's tests.
           git push origin HEAD:main

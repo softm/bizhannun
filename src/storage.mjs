@@ -1,5 +1,6 @@
 import { isValidBusinessNumber } from './domain.mjs';
 import { validateApiBase } from './api-client.mjs';
+import { normalizePartnerEnrichment, normalizePartnerNameOrigin } from './business-profile.mjs';
 
 const DB_NAME = 'bizhannun-workspace';
 const STORE = 'workspaces';
@@ -177,6 +178,8 @@ function partner(value) {
     result.lastSuccess = snapshot(item.lastSuccess, number, '최근 성공 조회');
     if (result.lastSuccess.outcome !== 'ok') invalid('최근 성공 조회');
   }
+  if (item.enrichment != null) result.enrichment = normalizePartnerEnrichment(item.enrichment, number);
+  if (item.nameOrigin != null) result.nameOrigin = normalizePartnerNameOrigin(item.nameOrigin, result.name, result.enrichment);
   return result;
 }
 function integer(value, field, { min = 0, max = Number.MAX_SAFE_INTEGER, optional = false } = {}) {
@@ -193,7 +196,7 @@ function profile(value) {
   });
   const businessKind = text(item.businessKind, '사업자 유형');
   if (!['', '개인사업자', '법인사업자', '예비창업자'].includes(businessKind)) invalid('사업자 유형');
-  return {
+  const result = {
     name: text(item.name, '사업 프로필 이름'), businessNumber: businessNumber(item.businessNumber, '사업 프로필 사업자번호', true),
     region: text(item.region, '사업장 지역', 100), industry: text(item.industry, '업종', 100),
     foundedAt: date(item.foundedAt, '개업일') || '', businessKind,
@@ -202,6 +205,8 @@ function profile(value) {
     revenueYear: integer(item.revenueYear, '매출 기준연도', { min: 1900, max: 2100, optional: true }),
     interests: [...new Set(interests)], providedBy: 'user', updatedAt: timestamp(item.updatedAt, '사업 프로필 수정일'),
   };
+  if (item.enrichment != null) result.enrichment = normalizePartnerEnrichment(item.enrichment, result.businessNumber);
+  return result;
 }
 function event(value, partners) {
   const item = record(value, '상태 변경 기록');

@@ -4,7 +4,7 @@ import { mkdtemp,writeFile,readFile,rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync, deflateSync, brotliCompressSync } from 'node:zlib';
-import { extractBusinessPage,robotsAllows,runCollector,validatePublicUrl,decodePublicBody } from '../scripts/collect-business-web.mjs';
+import { decodePublicBody,decodePageBody,decodeRobotsBody,extractBusinessPage,robotsAllows,runCollector,validatePublicUrl } from '../scripts/collect-business-web.mjs';
 
 const BNO='2208162517',OTHER='1048137225';
 const ORIGIN='https://company.testcorp.com';
@@ -108,8 +108,8 @@ test('EUC-KR response metadata is decoded before business extraction',async t=>{
 });
 
 test('directory tables yield the target company fields rather than directory operator or tax-office contacts',()=>{
- const page=extractBusinessPage(`<title>사업자 조회</title><meta property="og:site_name" content="디렉터리 운영사"><script type="application/ld+json">{"@type":"Organization","name":"디렉터리 운영사","telephone":"02-111-1111"}</script><table><tr><th>회사명</th><td>실제 대상기업</td></tr><tr><th>회사주소</th><td>서울시 공개 사업장</td></tr><tr><th>업태</th><td>서비스</td></tr><tr><th>종목</th><td>소프트웨어</td></tr><tr><th>관할세무서 전화번호</th><td>02-999-9999</td></tr></table><p>사업자번호 220-81-62517 관할세무서 전화번호: 02-999-9999</p>`,ORIGIN,{...seed,channel:'directory'},now());
- assert.equal(page.source.match,'exact_bno');assert.equal(page.source.channel,'directory');
+ const page=extractBusinessPage(`<title>사업자 조회</title><meta property="og:site_name" content="디렉터리 운영사"><script type="application/ld+json">{"@type":"Organization","name":"디렉터리 운영사","telephone":"02-111-1111"}</script><table><tr><th>회사명</th><td>실제 대상기업</td></tr><tr><th>회사주소</th><td>서울시 공개 사업장</td></tr><tr><th>업태</th><td>서비스</td></tr><tr><th>종목</th><td>소프트웨어</td></tr><tr><th>관할세무서 전화번호</th><td>02-999-9999</td></tr></table><p>사업자번호 220-81-62517 관할세무서 전화번호: 02-999-9999</p>`,ORIGIN+'/article/'+BNO,{...seed,channel:'directory'},now());
+ assert.equal(page.source.match,'exact_bno');assert.equal(page.source.channel,'directory');assert.ok(page.fields.every(field=>field.match==='exact_bno'));
  assert.deepEqual(page.fields.filter(f=>f.field==='name').map(f=>f.value),['실제 대상기업']);
  assert.ok(page.fields.some(f=>f.field==='address'&&f.value==='서울시 공개 사업장'));
  assert.ok(page.fields.some(f=>f.field==='businessType'&&f.value==='서비스'));
@@ -141,9 +141,9 @@ test('public website links expose news, hiring and social references as candidat
 });
 
 test('directory exact-number pages may use a company h1 or og title, but never an unverified seed name',()=>{
- const page=extractBusinessPage('<h1>공개 회사명</h1><p>사업자번호: 220-81-62517</p>',ORIGIN,{...seed,channel:'directory'},now());
+ const page=extractBusinessPage('<h1>공개 회사명</h1><p>사업자번호: 220-81-62517</p>',ORIGIN+'/article/'+BNO,{...seed,channel:'directory'},now());
  assert.ok(page.fields.some(field=>field.field==='name'&&field.value==='공개 회사명'));
- const og=extractBusinessPage('<meta property="og:title" content="공개 회사명 - 사업자등록번호 조회"><p>220-81-62517</p>',ORIGIN,{...seed,channel:'directory'},now());
+ const og=extractBusinessPage('<meta property="og:title" content="공개 회사명 - 사업자등록번호 조회"><p>220-81-62517</p>',ORIGIN+'/article/'+BNO,{...seed,channel:'directory'},now());
  assert.ok(og.fields.some(field=>field.field==='name'&&field.value==='공개 회사명'));
  const candidate=extractBusinessPage('<h1>사업자등록번호 조회</h1><p>다른 기업</p>',ORIGIN,{...seed,channel:'directory'},now());
  assert.equal(candidate.fields.some(field=>field.field==='name'),false);
@@ -214,6 +214,116 @@ test('publisher JSON-LD and footer contacts cannot be assigned to a mentioned BR
  const page=extractBusinessPage('<title>기업 소개 기사</title><meta property="og:site_name" content="언론사"><meta name="description" content="언론사 설명"><script type="application/ld+json">{"@type":"Organization","name":"언론사","telephone":"02-111-1111","email":"publisher@example.com"}</script><p>대상 사업자번호: 220-81-62517</p><footer>TEL: 02-111-1111 이메일: publisher@example.com</footer>',ORIGIN,seed,now());
  assert.equal(page.source.match,'exact_bno');
  assert.equal(page.fields.some(field=>['name','phone','email','description'].includes(field.field)),false);
+});
+
+
+test('UTF-8 bytes override obsolete EUC-KR declarations without corrupting Korean text',()=>{
+ const page='<meta charset="euc-kr"><h1>서해박속낙지전문점</h1>';
+ assert.equal(decodePageBody(Buffer.from(page),'text/html; charset=EUC-KR'),page);
+ const cp949=Buffer.concat([Buffer.from('<meta charset="cp949"><h1>'),Buffer.from([0xb0,0xa1]),Buffer.from('</h1>')]);
+ assert.ok(decodePageBody(cp949,'text/html; charset=UTF-8').includes('<h1>가</h1>'));
+ assert.throws(()=>decodePageBody(Buffer.from([0xff,0xfe,0xfa]),'text/html;charset=utf-8'),/unsupported_encoding/);
+});
+
+test('publisher footer BRN cannot confirm an unrelated business table or heading',()=>{
+ const markup='<h1>전혀 다른 회사</h1><table><tr><th>회사명</th><td>전혀 다른 회사</td></tr><tr><th>주소</th><td>다른 사업장</td></tr></table><footer>운영사 사업자번호 220-81-62517</footer>';
+ const page=extractBusinessPage(markup,ORIGIN+'/article/'+BNO,{...seed,channel:'directory'},now());
+ assert.equal(page.source.match,'candidate');assert.ok(page.fields.every(field=>field.match==='candidate'));
+ const cssFooter=extractBusinessPage(markup.replace('<footer>','<div class="site-footer"><span>').replace('</footer>','</span></div>'),ORIGIN,seed,now());
+ assert.equal(cssFooter.source.match,'candidate');
+});
+
+test('multi-company pages keep only the target registration-number table confirmed',()=>{
+ const markup=`<table><tr><th>사업자등록번호</th><td>220-81-62517</td></tr><tr><th>회사명</th><td>대상 기업</td></tr><tr><th>주소</th><td>대상 주소</td></tr></table><table><tr><th>사업자등록번호</th><td>104-81-37225</td></tr><tr><th>회사명</th><td>다른 기업</td></tr><tr><th>주소</th><td>다른 주소</td></tr></table>`;
+ const page=extractBusinessPage(markup,ORIGIN+'/article/'+BNO,{...seed,channel:'directory'},now());
+ assert.equal(page.source.match,'exact_bno');
+ assert.deepEqual(page.fields.filter(field=>field.field==='name'&&field.match!=='candidate').map(field=>field.value),['대상 기업']);
+ assert.ok(!page.fields.some(field=>field.value==='다른 주소'));
+ const unscoped=extractBusinessPage('<p>대상 번호 220-81-62517</p><table><tr><th>회사명</th><td>첫 회사</td></tr></table><table><tr><th>회사명</th><td>둘째 회사</td></tr></table>',ORIGIN+'/article/'+BNO,{...seed,channel:'directory'},now());
+ assert.ok(unscoped.fields.every(field=>field.match==='candidate'));
+});
+
+test('Organization graphs and affiliate pages do not merge sibling company details into the parent',()=>{
+ const organizations={ '@graph':[
+  {'@type':'Organization',name:'대상 기업',taxID:'220-81-62517',telephone:'02-111-1111'},
+  {'@type':'Organization',name:'다른 기업',taxID:'104-81-37225',telephone:'02-222-2222'},
+  {'@type':'Organization',name:'관계사',telephone:'02-333-3333'},
+ ]};
+ const page=extractBusinessPage('<script type="application/ld+json">'+JSON.stringify(organizations)+'</script>',ORIGIN+'/company/affiliates',{...seed,verifiedDomain:true},now());
+ assert.deepEqual(page.fields.filter(field=>field.field==='name').map(field=>field.value),['대상 기업']);
+ assert.deepEqual(page.fields.filter(field=>field.field==='phone').map(field=>field.value),['02-111-1111']);
+});
+
+test('HTTP 200 waiting rooms preserve the previous source and report an access restriction per page',async t=>{
+ const paths=await baseline(t),previous=paths.previous.businesses[0];
+ await runCollector({...paths,lookupImpl,now,delayMs:0,fetchImpl:async url=>url.pathname==='/robots.txt'?response(''):response('<title>접속대기_no1</title><p>현재 접속인원이 많아 접속이 지연되고 있습니다.</p>')});
+ const index=JSON.parse(await readFile(paths.outputPath,'utf8')),business=index.businesses[0];
+ assert.deepEqual(business.sources,previous.sources);assert.deepEqual(business.fields,previous.fields);
+ assert.equal(business.collection.error,'access_restricted');
+ assert.equal(business.collection.sourceStatuses[0].errorCode,'access_restricted');
+ assert.equal(business.collection.sourceStatuses[0].status,'error');
+ assert.equal(index.meta.lastSuccessAt,previous.collection.lastSuccessAt);assert.ok(index.meta.schedule.label.includes('06:17'));
+});
+
+test('additional public source URLs are bounded and keep distinct identity and page statuses',async t=>{
+ const paths=await files(t);await writeFile(paths.configPath,JSON.stringify([{...seed,verifiedDomain:true,sourceUrls:['https://publictourism.example.com/detail/company']}])) ;
+ const calls=[];
+ await runCollector({...paths,lookupImpl,now,delayMs:0,fetchImpl:async url=>{
+  calls.push(url.href);if(url.pathname==='/robots.txt')return response('');
+  return response(url.hostname==='company.testcorp.com'?html:'<title>공공 여행 안내</title><meta name="description" content="공개된 식당 소개"><p>번호 미제공</p>');
+ }});
+ const index=JSON.parse(await readFile(paths.outputPath,'utf8')),business=index.businesses[0];
+ const tourism=business.sources.find(source=>source.url.includes('publictourism'));
+ assert.equal(tourism.match,'candidate');assert.ok(business.fields.some(field=>field.sourceId===tourism.id&&field.match==='candidate'));
+ assert.ok(business.collection.sourceStatuses.some(status=>status.sourceUrl.includes('publictourism')&&status.status==='identity_mismatch'));
+ assert.ok(calls.filter(url=>!url.endsWith('/robots.txt')).length<=4);
+});
+
+test('automatic refresh retains the source ID while replacing changed facts at the same URL',async t=>{
+ const reviewed={businessNumber:BNO,collectedAt:'2026-10-20T00:00:00Z',sources:[{id:'reviewed',url:ORIGIN,match:'exact_bno',businessNumber:BNO,collectedAt:'2026-10-20T00:00:00Z'}],fields:[{field:'name',value:'과거 이름',sourceId:'reviewed',match:'exact_bno'},{field:'phone',value:'02-999-8888',sourceId:'reviewed',match:'exact_bno',scope:'public_business'}],collection:{lastSuccessAt:'2026-10-20T00:00:00Z'}};
+ const paths=await files(t,{previous:{businesses:[reviewed]}});
+ await runCollector({...paths,lookupImpl,now,delayMs:0,fetchImpl:async url=>url.pathname==='/robots.txt'?response(''):response(html)});
+ const business=JSON.parse(await readFile(paths.outputPath,'utf8')).businesses[0];
+ assert.ok(business.sources.some(source=>source.id==='reviewed'));
+ assert.ok(!business.fields.some(field=>field.value==='과거 이름'||field.value==='02-999-8888'));
+ assert.ok(business.fields.some(field=>field.value==='테스트기업'));
+});
+
+
+test('an explicit different business number revokes the old match without changing its observation date',async t=>{
+ const paths=await baseline(t),previous=paths.previous.businesses[0];
+ const different=html.replaceAll('220-81-62517','104-81-37225').replaceAll('테스트기업','다른 기업');
+ await runCollector({...paths,lookupImpl,now,delayMs:0,fetchImpl:async url=>url.pathname==='/robots.txt'?response(''):response(different)});
+ const business=JSON.parse(await readFile(paths.outputPath,'utf8')).businesses[0];
+ assert.ok(business.collection.sourceStatuses.every(status=>status.status==='identity_mismatch'&&status.errorCode==='entity_scope_mismatch'));
+ assert.ok(business.sources.filter(source=>!source.discoveredFrom).every(source=>source.match==='candidate'));
+ assert.ok(business.fields.every(field=>field.match==='candidate'));
+ assert.equal(business.sources[0].collectedAt,previous.sources[0].collectedAt);
+ assert.ok(!business.fields.some(field=>field.value==='다른 기업'));
+});
+
+test('hidden and script-embedded tables cannot establish target business facts',()=>{
+ const table='<table><tr><th>사업자등록번호</th><td>220-81-62517</td></tr><tr><th>회사명</th><td>숨겨진 업체</td></tr></table>';
+ const page=extractBusinessPage('<script>const template='+JSON.stringify(table)+'</script><div hidden>'+table+'</div><p>공개 본문</p>',ORIGIN,seed,now());
+ assert.equal(page.source.match,'candidate');assert.equal(page.fields.length,0);
+});
+
+
+test('official structured business metadata includes opening hours, services and public contact points',()=>{
+ const details={'@type':'LocalBusiness',taxID:'220-81-62517',name:'공개 업체',openingHoursSpecification:[{'@type':'OpeningHoursSpecification',dayOfWeek:['https://schema.org/Monday','https://schema.org/Tuesday'],opens:'09:00',closes:'18:00'}],contactPoint:[{'@type':'ContactPoint',telephone:'02-555-1234',email:'service@example.com'}],hasOfferCatalog:{itemListElement:[{itemOffered:{name:'공개 서비스'}}]}};
+ const page=extractBusinessPage('<meta property="business:contact_data:street_address" content="공개 도로 12"><script type="application/ld+json">'+JSON.stringify(details)+'</script>',ORIGIN,{...seed,verifiedDomain:true},now());
+ assert.ok(page.fields.some(field=>field.field==='hours'&&field.value.includes('09:00–18:00')));
+ assert.ok(page.fields.some(field=>field.field==='products'&&field.value==='공개 서비스'));
+ assert.ok(page.fields.some(field=>field.field==='phone'&&field.value==='02-555-1234'&&field.scope==='public_business'));
+ assert.ok(page.fields.some(field=>field.field==='address'&&field.value==='공개 도로 12'));
+});
+
+
+test('legacy Korean bytes in robots comments cannot block valid ASCII rules or change disallow paths',()=>{
+ const robots=Buffer.concat([Buffer.from('User-agent: *\n# '),Buffer.from([0xc7,0xd1,0xb1,0xdb]),Buffer.from('\nDisallow: /private\nAllow: /public # '),Buffer.from([0xc7,0xd1,0xb1,0xdb])]);
+ const decoded=decodeRobotsBody(robots,'text/plain');
+ assert.equal(robotsAllows(decoded,'/private/a'),false);assert.equal(robotsAllows(decoded,'/public'),true);
+ assert.throws(()=>decodeRobotsBody(Buffer.from([0x44,0x69,0x73,0x61,0x6c,0x6c,0x6f,0x77,0x3a,0x20,0x2f,0xff]),'text/plain'),/unsupported_encoding/);
 });
 
 test('a target number on the page never attributes another business table or recommendation to the target',()=>{
@@ -292,5 +402,66 @@ test('a successful refreshed URL retains its existing source ID and known entity
  assert.equal(business.sources.filter(source=>source.url===ORIGIN+'/').length,1);
  assert.ok(business.sources.some(source=>source.id==='reviewed-source'));
  assert.ok(business.fields.some(field=>field.sourceId==='reviewed-source'&&field.value==='갱신된기업'));
- assert.deepEqual(business.collection.sourceStatuses,old.collection.sourceStatuses);
+ assert.ok(business.collection.sourceStatuses.some(status=>status.provider==='ftc'&&status.status==='not_configured'));
+ assert.ok(business.collection.sourceStatuses.some(status=>status.provider==='web_page'&&status.status==='success'));
+});
+
+async function reviewedBaseline(t) {
+ const date='2026-10-20T00:00:00.000Z',id='reviewed-official-home';
+ const previous={businesses:[{businessNumber:BNO,name:seed.name,officialDomain:'company.testcorp.com',collectedAt:date,
+  sources:[{id,url:ORIGIN+'/',title:'검토한 공식 홈페이지',channel:'official_website',match:'confirmed_domain',collectedAt:date}],
+  fields:[['name','검토한 회사명'],['website',ORIGIN+'/'],['description','이전 설명'],['products','검토한 서비스']].map(([field,value])=>({field,value,sourceId:id,match:'confirmed_domain'})),
+  collection:{lastSuccessAt:date}}]};
+ const paths=await files(t,{previous});
+ await writeFile(paths.configPath,JSON.stringify([{...seed,verifiedDomain:true}]));
+ return {...paths,previous,date,id};
+}
+
+test('missing reviewed fields retain their original observation date while refreshed fields replace their old values',async t=>{
+ const paths=await reviewedBaseline(t);
+ const fetchImpl=async url=>url.pathname==='/robots.txt'?response(''):response('<meta name="description" content="새 설명">');
+ await runCollector({...paths,lookupImpl,now,delayMs:0,fetchImpl});
+ const business=JSON.parse(await readFile(paths.outputPath,'utf8')).businesses[0];
+ const history=business.sources.find(source=>source.id.startsWith('historical-reviewed-'));
+ assert.ok(history);assert.equal(history.collectedAt,paths.date);
+ assert.deepEqual(business.fields.filter(field=>field.sourceId===history.id).map(field=>[field.field,field.value]),[['name','검토한 회사명'],['products','검토한 서비스']]);
+ const current=business.sources.find(source=>source.id===paths.id);
+ assert.equal(current.collectedAt,now());
+ assert.ok(business.fields.some(field=>field.sourceId===current.id&&field.field==='description'&&field.value==='새 설명'));
+ assert.ok(!business.fields.some(field=>field.value==='이전 설명'));
+ await runCollector({...paths,lookupImpl,now:()=> '2026-10-22T13:00:00.000Z',delayMs:0,fetchImpl});
+ const again=JSON.parse(await readFile(paths.outputPath,'utf8')).businesses[0];
+ assert.deepEqual(again.sources.filter(source=>source.id.startsWith('historical-reviewed-')),[history]);
+ assert.equal(again.sources.length,business.sources.length);
+ assert.equal(again.fields.length,business.fields.length);
+});
+
+test('a newly extracted field supersedes the historical reviewed value and removes unused history',async t=>{
+ const paths=await reviewedBaseline(t);
+ await runCollector({...paths,lookupImpl,now,delayMs:0,fetchImpl:async url=>url.pathname==='/robots.txt'?response(''):response('<meta name="description" content="새 설명">')});
+ const complete='<meta name="description" content="최신 설명"><script type="application/ld+json">'+JSON.stringify({'@type':'Organization',name:'새 회사명',taxID:'220-81-62517',makesOffer:[{itemOffered:{name:'새 서비스'}}]})+'</script>';
+ await runCollector({...paths,lookupImpl,now:()=> '2026-10-22T13:00:00.000Z',delayMs:0,fetchImpl:async url=>url.pathname==='/robots.txt'?response(''):response(complete)});
+ const business=JSON.parse(await readFile(paths.outputPath,'utf8')).businesses[0];
+ assert.equal(business.sources.some(source=>source.id.startsWith('historical-reviewed-')),false);
+ assert.ok(business.fields.some(field=>field.field==='name'&&field.value==='새 회사명'));
+ assert.ok(business.fields.some(field=>field.field==='products'&&field.value==='새 서비스'));
+ assert.equal(business.fields.some(field=>['검토한 회사명','검토한 서비스'].includes(field.value)),false);
+});
+
+test('explicit identity mismatch revokes reviewed and historical facts and survives the next fetch failure',async t=>{
+ const paths=await reviewedBaseline(t);
+ await runCollector({...paths,lookupImpl,now,delayMs:0,fetchImpl:async url=>url.pathname==='/robots.txt'?response(''):response('<meta name="description" content="새 설명">')});
+ const snapshot=JSON.parse(await readFile(paths.outputPath,'utf8'));
+ snapshot.businesses[0].sources.find(source=>source.id===paths.id).channel='official_website';
+ await writeFile(paths.outputPath,JSON.stringify(snapshot));
+ await runCollector({...paths,lookupImpl,now:()=> '2026-10-22T13:00:00.000Z',delayMs:0,fetchImpl:async url=>url.pathname==='/robots.txt'?response(''):response('<p>사업자등록번호 104-81-37225</p>')});
+ const business=JSON.parse(await readFile(paths.outputPath,'utf8')).businesses[0];
+ assert.equal(business.collection.error,'entity_scope_mismatch');
+ assert.ok(business.sources.every(source=>source.match==='candidate'));
+ assert.ok(business.fields.every(field=>field.match==='candidate'));
+ assert.ok(business.sources.some(source=>source.identityMismatch===true&&source.matchedBusinessNumber===OTHER));
+ assert.equal(business.sources.find(source=>source.id===paths.id).collectedAt,now());
+ await runCollector({...paths,lookupImpl,now:()=> '2026-10-23T13:00:00.000Z',delayMs:0,fetchImpl:async url=>url.pathname==='/robots.txt'?response(''):response('Unavailable',503)});
+ const failed=JSON.parse(await readFile(paths.outputPath,'utf8')).businesses[0];
+ assert.deepEqual(failed.sources,business.sources);assert.deepEqual(failed.fields,business.fields);
 });

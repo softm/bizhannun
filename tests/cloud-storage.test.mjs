@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCloudWorkspace, mergeGuestWorkspace, splitCloudText, CLOUD_LIMITS } from '../src/cloud-storage.mjs';
 import { emptyWorkspace, validateBackup } from '../src/storage.mjs';
+import { attachPartnerEnrichment, derivePartnerProfile } from '../src/business-profile.mjs';
 
 const NOW = '2026-10-20T12:00:00.000Z';
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -99,6 +100,29 @@ test('full business workspace survives another client, without local API prefere
   assert.equal(loaded.partners[0].lastCheck.businessStatus, 'active');
   assert.equal(loaded.profile.employees, 0); assert.equal(loaded.events[0].acknowledgedAt, NOW);
   assert.equal(env.hooks.databaseId, 'bizhannun');
+});
+
+test('public business evidence and original source dates survive a Firestore save and a different client load', async () => {
+  const env = server(), first = env.client(), workspace = example();
+  const businessNumber = workspace.partners[0].businessNumber;
+  const evidence = { businessNumber, collectedAt: NOW,
+    sources: [{ id: 'registry', url: 'https://example.org/company', title: '공개 등록자료', channel: 'registry',
+      match: 'exact_bno', businessNumber, collectedAt: NOW }],
+    fields: [{ field: 'name', value: '확인된 사업자명', sourceId: 'registry', match: 'exact_bno' },
+      { field: 'address', value: '경기도 공개 사업장', sourceId: 'registry', match: 'exact_bno' }] };
+  workspace.partners[0] = attachPartnerEnrichment({ ...workspace.partners[0], name: '' }, evidence, { now: NOW });
+  workspace.profile.enrichment = workspace.partners[0].enrichment;
+  const saved = await first.cloud.save('alice', workspace);
+  const loaded = await env.client().cloud.load('alice');
+  assert.deepEqual(loaded.partners[0].enrichment, saved.partners[0].enrichment);
+  assert.deepEqual(loaded.profile.enrichment, saved.profile.enrichment);
+  assert.deepEqual(loaded.partners[0].nameOrigin, saved.partners[0].nameOrigin);
+  assert.equal(loaded.partners[0].note, '비공개 메모');
+  const view = derivePartnerProfile(loaded.partners[0], null, { now: NOW });
+  assert.equal(view.name, '확인된 사업자명');
+  assert.equal(view.nameSourceLabel, '공개 등록자료');
+  assert.equal(view.profile.address, '경기도 공개 사업장');
+  assert.equal(view.metrics.oldestCollectedAt, NOW);
 });
 
 test('memo edits replace only that entity, preserving unchanged references', async () => {

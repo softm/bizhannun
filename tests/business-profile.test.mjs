@@ -114,3 +114,27 @@ test('failed collection keeps previous attributable facts and the failure timest
   assert.equal(result.summary.collection.status, 'failed');
   assert.equal(result.summary.collection.lastAttemptAt, '2026-10-22T01:00:00.000Z');
 });
+
+test('canonical resolution includes saved snapshots and keeps automatic names attributed to public evidence', () => {
+  const evidence = record();
+  const saved = { businessNumber, name: '서해박속낙지전문점',
+    nameOrigin: { kind: 'public', value: '서해박속낙지전문점', sourceId: 'directory' }, enrichment: evidence };
+  const original = structuredClone(saved);
+  const offline = resolveBusinessProfile({ businessNumber, partner: saved });
+  assert.equal(offline.displayName, '서해박속낙지전문점');
+  assert.equal(offline.nameSource, 'public');
+  assert.equal(offline.userName, '');
+  assert.equal(offline.nameSourceLabel, '민간 기업정보 · 공개 사업자정보');
+  const latest = record();
+  latest.collectedAt = latest.sources[0].collectedAt = '2026-10-22T01:00:00.000Z';
+  latest.fields[0].value = '새로 확인한 공개 상호';
+  const refreshed = resolveBusinessProfile({ businessNumber, partner: saved, record: latest });
+  assert.equal(refreshed.displayName, '새로 확인한 공개 상호');
+  assert.equal(refreshed.nameCollectedAt, latest.collectedAt);
+  assert.equal(refreshed.hasCustomName, false);
+  const alias = resolveBusinessProfile({ businessNumber, partner: { ...saved, name: '우리 단골 식당' }, record: latest });
+  assert.equal(alias.displayName, '우리 단골 식당');
+  assert.equal(alias.nameSource, 'user');
+  assert.equal(alias.publicName, '새로 확인한 공개 상호');
+  assert.deepEqual(saved, original);
+});

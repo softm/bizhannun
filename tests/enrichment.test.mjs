@@ -187,6 +187,8 @@ test('catalog loading normalizes records, counts exclusions and whitelists metad
       actualUrl = url; options = init;
       return json({ businesses: [null, first, { businessNumber: 'invalid' }], meta: {
         status: 'partial', generatedAt: stamp, collectedAt: '2026-02-31', arbitrarySecret: 'hidden', loadedCount: 999,
+        lastAttemptAt: stamp, lastSuccessAt: '2026-02-31', attemptedCount: 2,
+        schedule: {label:'매일 오전 06:17 (한국 시간)',cron:'17 21 * * *',timezone:'Asia/Seoul',arbitrarySecret:'hidden'},
       } });
     },
   });
@@ -199,6 +201,9 @@ test('catalog loading normalizes records, counts exclusions and whitelists metad
   assert.deepEqual(loaded.meta, {
     status: 'partial', generatedAt: '2026-10-21T13:00:00.000Z', collectedAt: null,
     loadedCount: 1, inputCount: 3, excludedCount: 2,
+    lastAttemptAt: '2026-10-21T13:00:00.000Z', lastSuccessAt: null, attemptedCount: 2,
+    schedule: {label:'매일 오전 06:17 (한국 시간)',cron:'17 21 * * *',timezone:'Asia/Seoul'},
+    sourceCount: 3, fieldCount: 5,
   });
 });
 

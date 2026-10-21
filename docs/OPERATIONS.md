@@ -1,5 +1,7 @@
 # 사업자한눈 운영 안내
 
+> **현재 운영 경로 (v0.4, 2026-10-21):** 국세청은 브라우저 직접 조회, 공개 사업자·지원사업 자료는 GitHub Actions 수집 후 Pages 제공, 계정 보관은 Firebase 직접 연결입니다. 현재 설정은 [PAGES_DIRECT.md](PAGES_DIRECT.md), 사업자 수집·추가 채널·운영 상태는 [BUSINESS_ENRICHMENT.md](BUSINESS_ENRICHMENT.md)가 우선합니다. 이 문서의 Vercel API·서버 OAuth 배포 설명은 이전 구성 기록이며 현재 운영에서 사용하지 않습니다.
+
 이 문서는 저장소에 구현된 웹 앱을 실행·배포·점검하는 절차입니다. 제품 확장 아이디어는 [PRODUCT_PLAN.md](PRODUCT_PLAN.md)에 있으며 현재 운영 기능과 구분합니다.
 
 ## 1. 구성과 책임

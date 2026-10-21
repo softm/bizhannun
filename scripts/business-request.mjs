@@ -23,15 +23,36 @@ export function parseBusinessRequest(event={},inputs={}) {
   if(typeof name!=='string'||name.length>200||/[\r\n\u0000-\u001f]/.test(name))throw new Error('상호를 확인하세요.');
   const host = new URL(url).hostname.replace(/^www\./,'');
   const directory = !provided || [...directoryHosts].some(base=>host===base||host.endsWith('.'+base));
-  return {businessNumber,name:name==='_미입력_'?'':name,website:url,verifiedDomain:false,search:true,channel:directory?'directory':'website'};
+  return {businessNumber,name:name.trim()==='_미입력_'?'':name.trim(),website:url,verifiedDomain:false,search:true,channel:directory?'directory':'website'};
 }
 export async function prepareBusinessRequest({eventPath=process.env.GITHUB_EVENT_PATH,configPath='config/business-sources.json',inputs={businessNumber:process.env.BIZ_REQUEST_NUMBER,name:process.env.BIZ_REQUEST_NAME||'',website:process.env.BIZ_REQUEST_WEBSITE}}={}) {
   const event=eventPath?JSON.parse(await readFile(eventPath,'utf8')):{};
   const request=parseBusinessRequest(event,inputs);if(!request)return {requested:false};
   const config=JSON.parse(await readFile(configPath,'utf8'));
-  const index=config.businesses.findIndex(x=>x.businessNumber===request.businessNumber);
+  const index=config.businesses.findIndex(x=>normalizeBusinessNumber(x.businessNumber)===request.businessNumber);
   if(index<0)config.businesses.push(request);
-  else if(config.businesses[index].website!==request.website)config.businesses[index]=request;
+  else {
+    const previous=config.businesses[index];
+    const previousWebsite=safeEnrichmentUrl(previous.website);
+    const websiteInput=event.issue?field(event.issue.body||'','수집할 공개 웹사이트'):inputs.website;
+    const suppliedWebsite=typeof websiteInput==='string'&&websiteInput.trim()&&websiteInput.trim()!=='_미입력_';
+    // A number-only refresh must not replace a reviewed homepage with the default directory.
+    const website=(suppliedWebsite||!previousWebsite)?request.website:previousWebsite;
+    const websiteChanged=website!==previousWebsite;
+    const host=new URL(website).hostname.replace(/^www\./,'');
+    const inferredChannel=[...directoryHosts].some(base=>host===base||host.endsWith('.'+base))?'directory':'website';
+    const sourceUrls=[...new Set([
+      ...(websiteChanged&&previousWebsite?[previousWebsite]:[]),
+      ...(Array.isArray(previous.sourceUrls)?previous.sourceUrls:[]),
+    ].map(safeEnrichmentUrl).filter(url=>url&&url!==website))].slice(0,6);
+    config.businesses[index]={...previous,
+      businessNumber:request.businessNumber,name:request.name||previous.name||'',website,
+      verifiedDomain:websiteChanged?false:previous.verifiedDomain===true,
+      channel:websiteChanged?inferredChannel:(['directory','website'].includes(previous.channel)?previous.channel:inferredChannel),
+      search:typeof previous.search==='boolean'?previous.search:request.search,
+      ...(sourceUrls.length||Array.isArray(previous.sourceUrls)?{sourceUrls}:{}),
+    };
+  }
   if(config.businesses.length>100)throw new Error('등록 수집 대상은 현재 100곳까지 지원합니다.');
   await writeFile(configPath,JSON.stringify(config,null,2)+'\n');return {requested:true,businessNumber:request.businessNumber};
 }

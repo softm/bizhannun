@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { emptyWorkspace, validateBackup } from '../src/storage.mjs';
 import { applyCheckResults } from '../src/domain.mjs';
+import { attachPartnerEnrichment } from '../src/business-profile.mjs';
 
 const BRN = '2208162517';
 const OTHER_BRN = '1048137225';
@@ -103,4 +104,53 @@ test('restoring a backup drops unknown fields and cannot select an API destinati
   assert.equal(Object.hasOwn(restored.partners[0], 'injected'), false);
   assert.equal(Object.hasOwn(restored.profile, 'admin'), false);
   assert.equal({}.polluted, undefined);
+});
+
+function publicEvidence(businessNumber = BRN) {
+  return { businessNumber, collectedAt: '2026-10-21T00:00:00Z',
+    sources: [{ id: 'public-source', url: 'https://example.org/company', title: '공개 사업자자료',
+      businessNumber, match: 'exact_bno', channel: 'public_data', collectedAt: '2026-10-21T00:00:00Z' }],
+    fields: [{ field: 'name', value: '공개 상호', sourceId: 'public-source', match: 'exact_bno' },
+      { field: 'address', value: '서울특별시 공개 사업장', sourceId: 'public-source', match: 'exact_bno' }] };
+}
+
+test('partner public snapshots and name attribution survive backup restoration separately from private notes', () => {
+  const partner = attachPartnerEnrichment({ ...basePartner(), name: '', note: '내부 계약 메모' }, publicEvidence());
+  const restored = validateBackup(JSON.parse(JSON.stringify(backup({ partners: [partner] }))));
+  assert.deepEqual(restored.partners[0].enrichment, partner.enrichment);
+  assert.deepEqual(restored.partners[0].nameOrigin, partner.nameOrigin);
+  assert.equal(restored.partners[0].note, '내부 계약 메모');
+  const again = validateBackup(JSON.parse(JSON.stringify(restored)));
+  assert.deepEqual(again, restored);
+});
+
+test('business profile keeps its own source snapshot and rejects another business or a missing profile number', () => {
+  const input = backup({ profile: { name: '내 사업', businessNumber: BRN, enrichment: publicEvidence() } });
+  const restored = validateBackup(input);
+  assert.equal(restored.profile.enrichment.businessNumber, BRN);
+  assert.equal(restored.profile.enrichment.fields[1].value, '서울특별시 공개 사업장');
+  assert.deepEqual(validateBackup(JSON.parse(JSON.stringify(restored))).profile, restored.profile);
+  for (const profile of [
+    { businessNumber: OTHER_BRN, enrichment: publicEvidence() },
+    { name: '번호 미입력', enrichment: publicEvidence() },
+  ]) assert.throws(() => validateBackup(backup({ profile })), /일치/);
+});
+
+test('foreign or malformed public evidence is rejected before restore while legacy backups remain valid', () => {
+  for (const enrichment of [publicEvidence(OTHER_BRN), { ...publicEvidence(), sources: null },
+    { ...publicEvidence(), fields: [null] }, { ...publicEvidence(), bno: OTHER_BRN }]) {
+    assert.throws(() => validateBackup(backup({ partners: [{ ...basePartner(), enrichment }] })));
+  }
+  const legacy = validateBackup(backup());
+  assert.equal(legacy.partners[0].enrichment, undefined);
+  assert.equal(legacy.partners[0].nameOrigin, undefined);
+});
+
+test('a manually changed public name cannot retain a false source attribution after restoring a backup', () => {
+  const partner = attachPartnerEnrichment({ ...basePartner(), name: '' }, publicEvidence());
+  partner.name = '나만의 거래처 별칭';
+  const restored = validateBackup(backup({ partners: [partner] }));
+  assert.equal(restored.partners[0].name, partner.name);
+  assert.deepEqual(restored.partners[0].nameOrigin, { kind: 'user' });
+  assert.equal(restored.partners[0].enrichment.fields[0].value, '공개 상호');
 });
