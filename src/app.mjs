@@ -1,9 +1,12 @@
-import { normalizeBusinessNumber, formatBusinessNumber, isValidBusinessNumber, parseBusinessImport, exportPartnersCsv, applyCheckResults, buildInsights } from './domain.mjs';
+import { normalizeBusinessNumber, formatBusinessNumber, isValidBusinessNumber, parseBusinessImport, exportPartnersCsv, applyCheckResults } from './domain.mjs';
 import { emptyWorkspace, loadWorkspace, saveWorkspace, downloadText, validateBackup } from './storage.mjs';
 import { callApi, validateApiBase, failureResult } from './api-client.mjs';
 import { loadPrograms, rankPrograms } from './programs.mjs';
-import { loadEnrichment, loadEnrichmentCatalog } from './enrichment.mjs';
+import { loadEnrichmentIndex, summarizeEnrichment } from './enrichment.mjs';
 import { renderEnrichment, enrichmentNote } from './enrichment-view.mjs';
+import { resolveBusinessProfile } from './business-profile.mjs';
+import { buildBusinessInsights } from './business-insights.mjs';
+import { renderBusinessInsights } from './business-insights-view.mjs';
 import { classifyBusinessQuery, buildBusinessSearchIndex, searchBusinesses } from './business-search.mjs';
 import { renderBusinessSearch } from './business-search-view.mjs';
 import { createAuthClient } from './auth.mjs';
@@ -76,9 +79,15 @@ let programMeta = {};
 let programError = '';
 let programLoading = true;
 let collection = {};
+let publicRecords = new Map();
+let publicSummaries = new Map();
+let publicMeta = {};
+let publicIndexLoaded = false;
+let publicIndexLoading = false;
+let publicIndexError = '';
+let publicIndexPromise = null;
 let lookupSerial = 0;
-let businessCatalog = null;
-let businessCatalogPromise = null;
+let interactionEpoch = 0;
 let businessIndexCache = null;
 let lookupComposing = false;
 let renderAfterComposition = false;
@@ -93,7 +102,7 @@ const ui = {
   view: document.body.dataset.page === 'data' ? 'data' : (location.hash.slice(1).split('?')[0] || 'lookup'),
   enrichment:null, enrichmentBusy:false, enrichmentError:'', mode: 'partner', lookupQuery: '', lookupType:'auto', lookupError:'', lookup: null, commerce: null, lookupBusy: false,
   nameQuery:'', nameSearchBusy:false, nameSearchError:'', nameSearchPage:1, lookupSelection:null,
-  partnerQuery: '', partnerStatus: 'all', programQuery: '', programCategory: '', openOnly: true,
+  partnerQuery: '', partnerStatus: 'all', partnerInsight:'all', programQuery: '', programCategory: '', openOnly: true,
   page: 1, profileDraft: null, batchBusy: false, batchDone: 0, batchTotal: 0, mobileMenu: false
 };
 const app = document.getElementById('app');
@@ -101,6 +110,13 @@ const modalRoot = document.getElementById('modal-root');
 const currentApiBase = () => window.BIZHANNUN_CONFIG?.mode === 'direct' ? '' : workspace.preferences?.apiBase || window.BIZHANNUN_CONFIG?.apiBase || '';
 const byId = id => workspace.partners.find(p=>p.id===id);
 const byNumber = n => workspace.partners.find(p=>p.businessNumber===n);
+const linkedBusiness = (businessNumber, partner=byNumber(normalizeBusinessNumber(businessNumber))) => resolveBusinessProfile({
+  businessNumber, partner, record:publicRecords.get(normalizeBusinessNumber(businessNumber)),
+  summary:publicSummaries.get(normalizeBusinessNumber(businessNumber))
+});
+const publicBusiness = bno => ({record:publicRecords.get(normalizeBusinessNumber(bno))||null,summary:publicSummaries.get(normalizeBusinessNumber(bno))||null,meta:publicMeta});
+const insightModel = (bno, check=null) => buildBusinessInsights({businessNumber:bno,partner:byNumber(bno)||null,check,summary:linkedBusiness(bno).summary});
+const publicNameLine = profile => profile.publicName && profile.userName && profile.publicName!==profile.userName ? `<span class="subline public-name">공개 상호 · ${esc(profile.publicName)}</span>` : '';
 const getSourceName = source => typeof source === 'string' ? source : source?.name || '국세청';
 const getSourceUrl = result => safeUrl(result?.sourceUrl || (typeof result?.source==='object' ? result.source.url : '')) || 'https://www.data.go.kr/data/15081808/openapi.do';
 
@@ -160,7 +176,7 @@ async function switchAccount(uid){
   cloudStore?.dispose();cloudStore=null;
   activeUid=uid;cloudReady=false;accountTransition=true;saving=false;
   accountError='';accountNotice='';storageError='';remoteRevision=0;
-  lookupSerial++;restoreSelection++;importSelection++;
+  lookupSerial++;interactionEpoch++;restoreSelection++;importSelection++;
   ui.lookup=null;ui.lookupBusy=false;ui.commerce=null;ui.profileDraft=null;
   ui.lookupQuery='';ui.lookupError='';ui.lookupSelection=null;ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';ui.nameSearchPage=1;
   ui.enrichment=null;ui.enrichmentBusy=false;ui.enrichmentError='';businessIndexCache=null;
@@ -304,7 +320,7 @@ function shell(content) {
     <nav>${nav}</nav>
     <div class="side-spacer"></div>
     <div class="local-card">${icon('shield')}<div><strong>${authState.user?'내 계정에 보관':'이 기기에 보관'}</strong>${authState.user?esc(accountStorageStatus().label):'로그인하면 다른 기기에서도<br>내 기록을 이어서 볼 수 있어요.'}</div></div>
-    <div class="side-foot"><span>© bizhannun</span><span>v0.2</span></div>
+    <div class="side-foot"><span>© bizhannun</span><span>v0.4</span></div>
   </aside>
   <div class="main-wrap">
     <header class="topbar">
@@ -340,7 +356,28 @@ function statsView() {
   return `<div class="stats-grid">${values.map(([ic,label,v,unit,desc,tone])=>`<div class="card stat-card ${tone}"><div class="stat-top">${label}<div class="stat-icon">${icon(ic)}</div></div><div class="stat-value">${number(v)}<small>${unit}</small></div><div class="stat-caption">${desc}</div></div>`).join('')}</div>`;
 }
 function partnerTable(rows, compact=false) {
-  return `<div class="table-wrap ${compact?'dashboard-table':''}"><table><thead><tr>${!compact?'<th><input type="checkbox" id="select-all" aria-label="보이는 거래처 모두 선택"></th>':''}<th>거래처</th><th>사업자 상태</th><th>최근 확인</th>${!compact?'<th>태그</th><th><span class="sr-only">작업</span></th>':''}</tr></thead><tbody>${rows.map(p=>`<tr>${!compact?`<td><input type="checkbox" class="partner-check" data-id="${esc(p.id)}" aria-label="${esc(p.name||formatBusinessNumber(p.businessNumber))} 선택" ${selected.has(p.id)?'checked':''}></td>`:''}<td><div class="company-cell"><span class="company-avatar">${esc((p.name||'사').slice(0,1))}</span><div><button class="partner-name" data-action="detail" data-id="${esc(p.id)}">${esc(p.name||'이름 미입력')}</button><span class="subline number">${formatBusinessNumber(p.businessNumber)}</span></div></div></td><td>${badge(p.lastCheck)}${p.lastCheck?.outcome!=='ok'&&p.lastSuccess?`<span class="subline">직전 성공: ${esc(p.lastSuccess.statusLabel||statusNames[p.lastSuccess.businessStatus])}</span>`:''}</td><td><span class="subline" style="margin:0">${p.lastCheck?esc(fmtTime(p.lastCheck.checkedAt)):'아직 확인 전'}</span></td>${!compact?`<td><div class="chip-list">${(p.tags||[]).map(t=>`<span class="badge neutral">${esc(t)}</span>`).join('')||'<span class="muted">—</span>'}</div></td><td><button class="icon-button" data-action="edit-partner" data-id="${esc(p.id)}" aria-label="${esc(p.name||'거래처')} 수정">${icon('edit')}</button></td>`:''}</tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap ${compact?'dashboard-table':''}"><table><thead><tr>${!compact?'<th><input type="checkbox" id="select-all" aria-label="보이는 거래처 모두 선택"></th>':''}<th>거래처</th>${!compact?'<th>공개 사업 정보</th>':''}<th>사업자 상태</th><th>최근 확인</th>${!compact?'<th>태그</th><th><span class="sr-only">작업</span></th>':''}</tr></thead><tbody>${rows.map(p=>{
+    const linked=linkedBusiness(p.businessNumber,p),facts=linked.summary?.profile||{};
+    return `<tr>${!compact?`<td><input type="checkbox" class="partner-check" data-id="${esc(p.id)}" aria-label="${esc(linked.displayName)} 선택" ${selected.has(p.id)?'checked':''}></td>`:''}<td><div class="company-cell"><span class="company-avatar">${esc(linked.displayName.slice(0,1))}</span><div><button class="partner-name" data-action="detail" data-id="${esc(p.id)}">${esc(linked.displayName)}</button><span class="subline number">${formatBusinessNumber(p.businessNumber)}</span>${publicNameLine(linked)}<span class="subline source-caption">${esc(linked.nameSourceLabel)}</span></div></div></td>${!compact?`<td class="partner-business-info"><span>${esc(facts.businessCategory||facts.industry||'업종 미확인')}</span><span class="subline">${esc(facts.address||'주소 미확인')}</span>${linked.nameHasConflict?'<span class="badge warning">상호 출처별 차이</span>':''}</td>`:''}<td>${badge(p.lastCheck)}${p.lastCheck?.outcome!=='ok'&&p.lastSuccess?`<span class="subline">직전 성공: ${esc(p.lastSuccess.statusLabel||statusNames[p.lastSuccess.businessStatus])}</span>`:''}</td><td><span class="subline" style="margin:0">${p.lastCheck?esc(fmtTime(p.lastCheck.checkedAt)):'아직 확인 전'}</span></td>${!compact?`<td><div class="chip-list">${(p.tags||[]).map(t=>`<span class="badge neutral">${esc(t)}</span>`).join('')||'<span class="muted">—</span>'}</div></td><td><button class="icon-button" data-action="edit-partner" data-id="${esc(p.id)}" aria-label="${esc(linked.displayName)} 수정">${icon('edit')}</button></td>`:''}</tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+function businessInformation(bno) {
+  const linked=linkedBusiness(bno), data=publicBusiness(bno);
+  return renderEnrichment({businessNumber:bno,...data,summary:linked.summary,loading:publicIndexLoading,error:publicIndexError,name:linked.displayName==='이름 미입력'?'':linked.displayName});
+}
+function businessInsightView(bno,check=null,compact=false) {
+  return renderBusinessInsights(insightModel(bno,check),{compact});
+}
+function portfolioView() {
+  if(!workspace.partners.length)return '';
+  const models=workspace.partners.map(p=>insightModel(p.businessNumber,p.lastCheck));
+  const options=[
+    ['refresh','상태 재확인',models.filter(m=>m.status.needsRefresh).length,'7일 경과·미확인·조회 실패','clock'],
+    ['linked','공개정보 연결',models.filter(m=>m.profile.fields.length).length,'동일 번호의 출처가 연결된 거래처','link'],
+    ['conflict','출처별 차이',models.filter(m=>m.conflicts.length).length,'같은 항목의 값이 다른 거래처','info'],
+    ['missing','기본정보 보강',models.filter(m=>m.profile.missing.length).length,'6개 기본 항목 중 미확보 자료 있음','file']
+  ];
+  return `<section class="card portfolio-panel" aria-label="거래처 점검"><div class="card-header"><div><h2>거래처 점검</h2><p class="fine-print">${number(workspace.partners.length)}곳의 확인 기록과 공개자료를 함께 살펴봅니다.</p></div><button class="text-button" data-action="insight-filter" data-filter="all">전체 거래처 ${icon('chevron')}</button></div><div class="portfolio-grid">${options.map(([key,label,count,desc,symbol])=>`<button class="portfolio-metric ${ui.partnerInsight===key&&ui.view==='partners'?'is-selected':''}" data-action="insight-filter" data-filter="${key}" aria-label="${label} ${count}곳 보기"><span>${icon(symbol)}${label}</span><strong>${count}<small>곳</small></strong><p>${desc}</p></button>`).join('')}</div><p class="portfolio-note">확인할 정보의 범위입니다. 업체의 신용등급이나 거래 안전성을 평가한 수치가 아닙니다.</p>${publicIndexError?`<p class="insight-notice is-attention">${esc(publicIndexError)}</p>`:''}</section>`;
 }
 function lookupView() {
   return pageHeading('사업의 다음을, 한눈에.','사업자 확인부터 거래처 관리, 내 사업의 새로운 기회까지.',`<div class="button-row"><button class="button" data-action="import">${icon('upload')} 거래처 일괄 등록</button></div>`)+`
@@ -355,8 +392,8 @@ function lookupView() {
   </section>
   ${nameSearchView()}
   ${ui.lookupBusy?'<div class="callout lookup-progress" role="status"><span class="spinner"></span><span>선택한 사업자번호의 상태와 공개정보를 조회하고 있습니다.</span></div>':''}
-  ${ui.lookup?lookupResultView()+renderEnrichment({businessNumber:ui.lookup.businessNumber,record:ui.enrichment?.record,summary:ui.enrichment?.summary,loading:ui.enrichmentBusy,error:ui.enrichmentError,name:byNumber(ui.lookup.businessNumber)?.name||ui.lookupSelection?.name||''}):''}
-  ${statsView()}
+  ${ui.lookup?lookupResultView()+businessInsightView(ui.lookup.businessNumber,ui.lookup)+businessInformation(ui.lookup.businessNumber):''}
+  ${workspace.partners.length?portfolioView():statsView()}
   <div class="content-grid">
     <section class="card"><div class="card-header"><h2>내 거래처 <span class="pill-label" style="margin-left:6px">${number(workspace.partners.length)}</span></h2><a class="text-button" href="./#partners" data-nav="partners">전체 보기 ${icon('chevron')}</a></div>
       ${workspace.partners.length?partnerTable(workspace.partners.slice(0,5),true):empty('folder','첫 거래처를 등록해 보세요','상호나 사업자번호로 조회하거나 CSV 파일로 등록하면<br>확인한 상태와 변경 기록을 함께 관리할 수 있어요.',`<button class="button light small" data-action="add-partner">${icon('plus')} 거래처 등록</button>`)}
@@ -374,9 +411,9 @@ function lookupView() {
   <section class="mini-banner"><span class="mini-visual">${icon('spark')}</span><div class="mini-text"><h3>내 사업에 어울리는 지원사업, 놓치지 마세요.</h3><p>프로필을 입력하면 지역·관심 분야를 바탕으로 관련 공고를 보여드려요.</p></div><a class="button light" href="./#programs" data-nav="programs">지원사업 찾기 ${icon('arrow')}</a></section>`;
 }
 function businessSearchIndex() {
-  const records=businessCatalog?.records;
+  const records=publicRecords;
   if(!businessIndexCache||businessIndexCache.records!==records||businessIndexCache.workspace!==workspace){
-    businessIndexCache={records,workspace,value:buildBusinessSearchIndex({records:records||[],partners:workspace.partners,profile:workspace.profile})};
+    businessIndexCache={records,workspace,value:buildBusinessSearchIndex({records:[...records.values()],partners:workspace.partners,profile:workspace.profile})};
   }
   return businessIndexCache.value;
 }
@@ -390,19 +427,19 @@ function currentNameSearch() {
 function nameSearchView() {
   if(!ui.nameQuery)return '';
   const {index,result}=currentNameSearch();
-  return renderBusinessSearch({query:ui.nameQuery,index,result,loading:ui.nameSearchBusy,error:ui.nameSearchError,
-    meta:businessCatalog?.meta||{},selectedNumber:ui.lookupSelection?.businessNumber||''});
+  return renderBusinessSearch({query:ui.nameQuery,index,result,loading:ui.nameSearchBusy,error:ui.nameSearchError||publicIndexError,
+    meta:publicMeta,selectedNumber:ui.lookupSelection?.businessNumber||''});
 }
 function lookupResultView() {
   const r=ui.lookup;
   const commerce=ui.commerce;
   const registered=byNumber(r.businessNumber);
-  const profile=commerce?.records?.[0];
-  const insights=buildInsights(registered||{businessNumber:r.businessNumber,name:profile?.name||'',lastCheck:r,lastSuccess:r.outcome==='ok'?r:null,history:[r]});
-  return `<section id="lookup-result" class="card result-panel" aria-live="polite"><div class="card-header"><div><h2 id="lookup-result-title" tabindex="-1">${esc(ui.enrichment?.summary?.profile?.name||profile?.name||registered?.name||ui.lookupSelection?.name||'사업자 조회 결과')}</h2><span class="subline">${formatBusinessNumber(r.businessNumber)}</span></div><div class="button-row">${badge(r)}<button class="icon-button" data-action="close-result" aria-label="조회 결과 접기">${icon('x')}</button></div></div><div class="result-body">
+  const profile=commerce?.records?.find(item=>normalizeBusinessNumber(item.businessNumber)===r.businessNumber);
+  const ownProfile=normalizeBusinessNumber(workspace.profile.businessNumber)===r.businessNumber?workspace.profile:null;
+  const linked=linkedBusiness(r.businessNumber,registered||ownProfile);
+  return `<section id="lookup-result" class="card result-panel" aria-live="polite"><div class="card-header"><div><h2 id="lookup-result-title" tabindex="-1">${esc(linked.displayName==='이름 미입력'?'사업자 조회 결과':linked.displayName)}</h2><span class="subline">${formatBusinessNumber(r.businessNumber)}</span>${publicNameLine(linked)}<span class="subline source-caption">${esc(linked.nameSourceLabel)}</span></div><div class="button-row">${badge(r)}<button class="icon-button" data-action="close-result" aria-label="조회 결과 접기">${icon('x')}</button></div></div><div class="result-body">
     ${r.outcome!=='ok'?`<div class="callout ${r.outcome==='error'?'warning':''}">${icon('info')}<span>${esc(r.message||'이 출처에서 사업자 정보를 확인하지 못했습니다.')}${r.outcome==='not_configured'?' 거래처를 먼저 저장해 두고 연결 후 다시 확인할 수 있어요.':''}</span></div>`:''}
     <dl class="detail-grid"><div class="detail-fact"><dt>사업자 상태</dt><dd>${r.outcome==='ok'?esc(r.statusLabel||statusNames[r.businessStatus]):'미확인'}<small>${esc(getSourceName(r.source))}</small></dd></div><div class="detail-fact"><dt>과세유형</dt><dd>${esc(r.taxType||'미확인')}<small>조회 응답 기준</small></dd></div>${r.closedAt?`<div class="detail-fact"><dt>폐업일</dt><dd>${esc(fmtDate(r.closedAt))}</dd></div>`:''}${profile?`<div class="detail-fact"><dt>통신판매 등록 상호</dt><dd>${esc(profile.name||'미제공')}<small>공정거래위원회 · 번호 일치 자료</small></dd></div><div class="detail-fact"><dt>공개 사업장 주소</dt><dd>${esc(profile.address||'미제공')}<small>등록 자료의 주소</small></dd></div>`:''}</dl>
-    ${insights.filter(insight=>insight.tone==='warning').slice(0,2).map(insight=>`<div class="insight-card ${esc(insight.tone)}">${icon(insight.tone==='warning'?'info':'shield')}<div><h3>${esc(insight.title)}</h3><p>${esc(insight.description)}</p>${insight.action?`<div class="insight-action">${esc(insight.action)}</div>`:''}</div></div>`).join('')}
     <div class="source-info-line">${external(getSourceUrl(r),getSourceName(r.source))} · 조회시각 ${esc(fmtTime(r.checkedAt))}${commerce?` · 통신판매: ${commerce.outcome==='ok'?number(commerce.records?.length||0)+'건 확인':commerce.outcome==='not_found'?'해당 자료 없음':'미확인'}`:''}</div>
     <div class="button-row result-note"><button class="button primary small" data-action="save-lookup">${icon(registered?'edit':'plus')} ${registered?'거래처 정보 수정':'거래처에 저장'}</button>${ui.mode==='mine'?`<button class="button light small" data-action="use-mine">내 사업으로 입력 ${icon('arrow')}</button>`:''}<button class="button small" data-action="validate-open">${icon('check')} 등록정보 진위 대조</button><a class="text-button" href="./#data" data-nav="data">연동 상태 보기 ${icon('chevron')}</a></div>
   </div></section>`;
@@ -410,7 +447,15 @@ function lookupResultView() {
 function filteredPartners() {
   return workspace.partners.filter(p=>{
     const q=ui.partnerQuery.toLowerCase().trim();
-    if(q&&!(p.name+' '+p.businessNumber+' '+formatBusinessNumber(p.businessNumber)+' '+(p.tags||[]).join(' ')).toLowerCase().includes(q))return false;
+    const linked=linkedBusiness(p.businessNumber,p),facts=linked.summary?.profile||{};
+    if(q&&![linked.displayName,linked.publicName,p.businessNumber,formatBusinessNumber(p.businessNumber),facts.address,facts.industry,facts.businessCategory,...(p.tags||[])].filter(Boolean).join(' ').toLowerCase().includes(q))return false;
+    if(ui.partnerInsight!=='all'){
+      const model=insightModel(p.businessNumber,p.lastCheck);
+      if(ui.partnerInsight==='refresh'&&!model.status.needsRefresh)return false;
+      if(ui.partnerInsight==='linked'&&!model.profile.fields.length)return false;
+      if(ui.partnerInsight==='conflict'&&!model.conflicts.length)return false;
+      if(ui.partnerInsight==='missing'&&!model.profile.missing.length)return false;
+    }
     if(ui.partnerStatus==='all')return true;
     if(ui.partnerStatus==='unchecked')return !p.lastSuccess;
     if(ui.partnerStatus==='error')return p.lastCheck&&['error','not_configured','not_found'].includes(p.lastCheck.outcome);
@@ -421,7 +466,9 @@ function partnersView() {
   const rows=filteredPartners();
   return pageHeading('함께하는 거래처를 한눈에','확인한 사실은 남기고, 달라진 정보는 다시 살펴보세요.',`<div class="button-row"><button class="button" data-action="import">${icon('upload')} CSV 가져오기</button><button class="button primary" data-action="add-partner">${icon('plus')} 거래처 등록</button></div>`)+`
   <div class="callout">${icon('shield')}<span>${authState.user?'거래처·메모·확인 기록을 <strong>내 계정에 저장</strong>합니다. 같은 계정으로 다른 기기에서도 이어서 확인하세요.':'거래처·메모·확인 기록은 <strong>이 기기에 저장</strong>합니다. 로그인하면 계정으로 가져와 다른 기기에서도 사용할 수 있습니다.'}</span></div>
-  <div class="toolbar"><div class="filter-group"><div class="input-wrap">${icon('search')}<input id="partner-search" placeholder="업체명, 사업자번호, 태그 검색" value="${esc(ui.partnerQuery)}" aria-label="거래처 검색"></div><select id="partner-status" class="filter-select" aria-label="거래처 상태 필터"><option value="all">모든 상태</option>${[['active','계속사업자'],['suspended','휴업자'],['closed','폐업자'],['unchecked','확인 전'],['error','미확인·조회 실패']].map(([v,t])=>`<option value="${v}" ${ui.partnerStatus===v?'selected':''}>${t}</option>`).join('')}</select></div><div class="button-row"><button class="button small" data-action="export-csv" ${!workspace.partners.length?'disabled':''}>${icon('download')} CSV</button><button class="button small" data-action="import">${icon('upload')} 가져오기</button><button class="button light small" data-action="add-partner">${icon('plus')} 등록</button></div></div>
+  ${portfolioView()}
+  ${ui.partnerInsight!=='all'?`<div class="active-insight-filter"><strong>${esc(({refresh:'상태 재확인',linked:'공개정보 연결',conflict:'출처별 차이',missing:'기본정보 보강'})[ui.partnerInsight])}</strong> 거래처를 보고 있습니다.<button class="text-button" data-action="insight-filter" data-filter="all">필터 해제 ×</button></div>`:''}
+  <div class="toolbar"><div class="filter-group"><div class="input-wrap">${icon('search')}<input id="partner-search" placeholder="상호, 사업자번호, 주소, 업종, 태그 검색" value="${esc(ui.partnerQuery)}" aria-label="거래처 검색"></div><select id="partner-status" class="filter-select" aria-label="거래처 상태 필터"><option value="all">모든 상태</option>${[['active','계속사업자'],['suspended','휴업자'],['closed','폐업자'],['unchecked','확인 전'],['error','미확인·조회 실패']].map(([v,t])=>`<option value="${v}" ${ui.partnerStatus===v?'selected':''}>${t}</option>`).join('')}</select></div><div class="button-row"><button class="button small" data-action="export-csv" ${!workspace.partners.length?'disabled':''}>${icon('download')} CSV</button><button class="button small" data-action="import">${icon('upload')} 가져오기</button><button class="button light small" data-action="add-partner">${icon('plus')} 등록</button></div></div>
   ${selected.size?`<div class="selected-bar"><span>${selected.size}곳 선택</span><div class="button-row"><button class="button primary small" data-action="batch-check" data-scope="selected" ${ui.batchBusy?'disabled':''}>${icon('refresh')} 선택 거래처 확인</button><button class="text-button" data-action="deselect">선택 해제</button></div></div>`:''}
   ${ui.batchBusy?`<div class="callout"><span class="spinner"></span><div style="flex:1">상태 확인 중 · ${ui.batchDone}/${ui.batchTotal}곳<div class="progress-strip"><span style="width:${ui.batchTotal?ui.batchDone/ui.batchTotal*100:0}%"></span></div></div></div>`:''}
   <section class="card"><div class="card-header"><h2>거래처 목록 <span class="pill-label" style="margin-left:6px">${number(rows.length)}</span></h2><button class="text-button" data-action="batch-check" data-scope="all" ${ui.batchBusy||!workspace.partners.length?'disabled':''}>${icon('refresh')} 전체 상태 확인</button></div>${rows.length?partnerTable(rows):empty('folder',workspace.partners.length?'검색 결과가 없어요':'관리할 거래처를 등록하세요',workspace.partners.length?'다른 업체명이나 상태로 검색해 보세요.':'직접 입력하거나 CSV에서 여러 거래처를 한 번에 가져올 수 있어요.',`<button class="button light small" data-action="add-partner">${icon('plus')} 거래처 등록</button>`)}</section>
@@ -478,9 +525,21 @@ function profileView() {
 function historyView() {
   return pageHeading('달라진 정보를 놓치지 않도록','성공한 조회끼리 비교한 상태 변화와 일괄 확인 기록을 모았어요.',`<div class="button-row"><button class="button" data-action="acknowledge-all" ${!workspace.events.some(e=>!e.acknowledgedAt)?'disabled':''}>${icon('check')} 모두 확인함</button></div>`)+`
   <div class="content-grid"><section class="card"><div class="card-header"><h2>상태 변화 <span class="pill-label">${number(workspace.events.length)}</span></h2></div>
-    ${workspace.events.length?`<div class="timeline">${workspace.events.slice(0,100).map(e=>`<article class="timeline-item"><span class="timeline-icon">${icon('bell')}</span><div class="timeline-content"><h3>${esc(byId(e.partnerId)?.name||formatBusinessNumber(e.businessNumber))} · ${esc(e.title||'사업자 상태 변경')}</h3><p>${esc(e.message||(statusNames[e.from]||e.from)+' → '+(statusNames[e.to]||e.to))}</p><div style="margin-top:7px">${e.acknowledgedAt?'<span class="badge neutral">확인함</span>':`<button class="text-button" data-action="acknowledge" data-id="${esc(e.id)}">${icon('check')} 확인함</button>`}</div></div><span class="timeline-date">${esc(fmtTime(e.occurredAt))}</span></article>`).join('')}</div>`:empty('clock','확인된 상태 변화가 없어요','거래처를 두 번 이상 정상 조회하면<br>이전 성공 결과와 달라진 상태가 이곳에 표시됩니다.')}
+    ${workspace.events.length?`<div class="timeline">${workspace.events.slice(0,100).map(e=>`<article class="timeline-item"><span class="timeline-icon">${icon('bell')}</span><div class="timeline-content"><h3>${esc(linkedBusiness(e.businessNumber,byId(e.partnerId)).displayName)} · ${esc(e.title||'사업자 상태 변경')}</h3><p>${esc(e.message||(statusNames[e.from]||e.from)+' → '+(statusNames[e.to]||e.to))}</p><div style="margin-top:7px">${e.acknowledgedAt?'<span class="badge neutral">확인함</span>':`<button class="text-button" data-action="acknowledge" data-id="${esc(e.id)}">${icon('check')} 확인함</button>`}</div></div><span class="timeline-date">${esc(fmtTime(e.occurredAt))}</span></article>`).join('')}</div>`:empty('clock','확인된 상태 변화가 없어요','거래처를 두 번 이상 정상 조회하면<br>이전 성공 결과와 달라진 상태가 이곳에 표시됩니다.')}
     <div class="card-foot">알림 시각은 앱이 변화를 확인한 시각이며, 실제 변경 발생일과 다를 수 있어요.</div>
   </section><section class="card"><div class="card-header"><h2>일괄 확인 기록</h2></div>${workspace.checks.length?`<div class="timeline">${workspace.checks.slice(0,15).map(c=>`<div class="timeline-item"><span class="timeline-icon">${icon('check')}</span><div class="timeline-content"><h3>${number(c.total)}곳 상태 확인</h3><p>응답 확인 ${number(c.ok)} · 미확인/실패 ${number(c.failed)}<br>${esc(fmtTime(c.checkedAt))}</p></div></div>`).join('')}</div>`:empty('file','첫 확인 기록을 기다리고 있어요','거래처 관리에서 전체 또는 선택한 거래처의 상태를 확인해 보세요.',`<a class="button light small" href="./#partners" data-nav="partners">거래처 관리</a>`)}</section></div>`;
+}
+function publicCollectionView() {
+  const records=[...publicRecords.values()];
+  const latest=values=>values.filter(v=>Number.isFinite(Date.parse(v))).sort().at(-1)||null;
+  const attemptedAt=latest(records.map(r=>r.collection?.lastAttemptAt));
+  const succeededAt=latest(records.map(r=>r.collection?.lastSuccessAt));
+  const label={success:'수집 완료',partial:'일부 수집',failed:'최근 수집 실패',not_collected:'미수집',not_configured:'연결 설정 대기'};
+  const sourceLabel={success:'수집 완료',partial:'일부 수집',not_found:'해당 원천 자료 없음',not_configured:'인증키 설정 대기',identity_mismatch:'번호 불일치',error:'활용승인·연결 확인 필요'};
+  return `<section class="card public-collection-panel section-spacer" aria-label="사업자 공개정보 수집 현황"><div class="card-header"><div><h2>사업자 공개정보 수집 현황</h2><p class="fine-print">등록된 수집 대상만 갱신합니다. 전국 사업자를 모두 확보한 목록은 아닙니다.</p></div><button class="button small" data-action="reload-enrichment">수집본 새로고침</button></div><div class="collection-highlights"><div><span>자동 수집 주기</span><strong>매일 06:17</strong><small>한국시간 · 추가 수집 요청 시에도 실행</small></div><div><span>마지막 수집 시도</span><strong>${esc(fmtTime(attemptedAt))}</strong><small>수집본에 기록된 실제 시도 시각</small></div><div><span>마지막 성공 수집</span><strong>${esc(fmtTime(succeededAt))}</strong><small>업체별 성공 시각은 아래 표에서 확인</small></div></div>
+  ${publicIndexLoading?'<p class="inline-loading"><span class="spinner"></span> 공개자료 현황을 불러오고 있습니다.</p>':''}${publicIndexError?`<p class="insight-notice is-attention">${esc(publicIndexError)}</p>`:''}
+  <div class="table-wrap"><table><thead><tr><th>사업자 · 연결 상호</th><th>확인 항목</th><th>수집 결과</th><th>마지막 성공</th><th>마지막 시도</th></tr></thead><tbody>${records.map(record=>{const linked=linkedBusiness(record.businessNumber),summary=linked.summary;return `<tr><td><strong>${esc(linked.publicName||'상호 미확인')}</strong><span class="subline number">${formatBusinessNumber(record.businessNumber)}</span></td><td>${summary?.fieldCount||0}개 · ${summary?.confirmedCount||0}개 출처</td><td><span class="badge ${['failed','partial'].includes(record.collection?.status)?'warning':'neutral'}">${esc(label[record.collection?.status]||'미확인')}</span></td><td>${esc(fmtTime(record.collection?.lastSuccessAt))}</td><td>${esc(fmtTime(record.collection?.lastAttemptAt))}</td></tr>`;}).join('')||'<tr><td colspan="5">아직 불러온 사업자 수집본이 없습니다.</td></tr>'}</tbody></table></div>
+  <details class="collection-source-details"><summary>업체별 제공기관 연결 기록</summary>${records.map(record=>`<article><h3>${esc(linkedBusiness(record.businessNumber).displayName)} · ${formatBusinessNumber(record.businessNumber)}</h3>${(record.collection?.sourceStatuses||[]).map(source=>`<p><strong>${esc(source.label)}</strong> · ${esc(sourceLabel[source.status]||'미확인')} · ${esc(fmtTime(source.checkedAt))}${source.message?`<small>${esc(source.message)}</small>`:''}</p>`).join('')||'<p>추가 공공 API 연결 기록이 없습니다.</p>'}</article>`).join('')}</details><div class="card-foot">수집본 ${number(records.length)}곳 · 파일 갱신 ${esc(fmtTime(publicMeta.generatedAt))}${publicMeta.rejectedCount?` · 번호·형식 오류로 제외 ${publicMeta.rejectedCount}건`:''}<br>실패한 수집과 정보가 없는 경우를 구분하고, 기존에 확보한 정보는 해당 출처의 수집 시각과 함께 유지합니다.</div></section>`;
 }
 function dataView() {
   const nts=health?.providers?.nts,ftc=health?.providers?.ftc;
@@ -492,11 +551,14 @@ function dataView() {
   ];
   return pageHeading('데이터는 투명하게, 판단은 정확하게','실제 연결 상태와 수집 결과, 데이터의 출처·기준일을 확인하세요.',`<div class="button-row"><button class="button" data-action="refresh-health">${icon('refresh')} 상태 새로고침</button></div>`)+`
   <div class="callout">${icon('info')}<span>API 설정 여부와 실제 조회 성공은 다릅니다. 개별 사업자 화면에는 <strong>조회 응답·출처·조회시각</strong>을 함께 표시합니다.</span></div>
+  <div class="callout collection-highlight">${icon('clock')}<span><strong>국세청 조회: 조회 버튼을 누를 때 확인</strong><br>원천 정보 갱신은 30분 주기이며 신규 개업자는 1~2일이 걸릴 수 있습니다. 앱의 최근 조회시각과 구분해 확인하세요.</span></div>
+  ${publicCollectionView()}
   <div class="section-spacer source-list">${rows.map(r=>`<section class="card source-card"><div><h3>${r.name}</h3><p>${r.description}</p></div><div class="source-status"><span class="badge ${r.tone} dot">${r.value}</span>${external(r.url,'출처','button small')}</div></section>`).join('')}</div>
   <section class="card source-card section-spacer"><div><h3>Firebase · 계정 보관</h3><p>${esc(sync.message)}</p>${authState.user&&cloudReady&&workspace.updatedAt?`<p>마지막 서버 확인 · ${esc(fmtTime(workspace.updatedAt))}</p>`:''}</div><div class="source-status"><span class="badge ${sync.tone} dot">${esc(sync.label)}</span><a class="button small" href="./#account" data-nav="account">계정 확인</a></div></section>
   <div class="content-grid section-spacer"><section class="card"><div class="card-header"><h2>지원사업 수집 결과</h2><span class="pill-label">실제 파일 기준</span></div><table class="status-table"><tbody>
     <tr><td>불러온 공고</td><td>${number(programs.length)}건</td></tr>
-    <tr><td>마지막 성공</td><td>${esc(fmtTime(collection.lastSuccessAt||programMeta.collectedAt||programMeta.generatedAt||programMeta.lastSuccessfulAt))}</td></tr>
+    <tr class="collection-highlight"><td>자동 수집 주기</td><td><strong>매일 06:17 · 한국시간</strong></td></tr>
+    <tr class="collection-highlight"><td>마지막 성공 수집</td><td><strong>${esc(fmtTime(collection.lastSuccessAt||programMeta.collectedAt||programMeta.generatedAt||programMeta.lastSuccessfulAt))}</strong></td></tr>
     <tr><td>원천 목록 갱신</td><td>${esc(fmtTime(collection.upstreamLastSuccessAt||programMeta.upstreamLastSuccessAt))}</td></tr>
     ${collection.upstreamSources?.bizinfo?.lastSuccessAt?`<tr><td>기업마당 원천 기준</td><td>${esc(fmtTime(collection.upstreamSources.bizinfo.lastSuccessAt))}</td></tr>`:''}
     <tr><td>마지막 수집 시도</td><td>${esc(fmtTime(collection.lastAttemptAt||collection.attemptedAt))}</td></tr>
@@ -510,6 +572,7 @@ function dataView() {
 
 
 function openModal(title,body,wide=false) {
+  interactionEpoch++;
   previousFocus=document.activeElement;
   modal={title,body,wide};
   modalRoot.innerHTML=`<div class="modal-backdrop" data-action="close-modal-backdrop"><section class="modal ${wide?'wide':''}" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header class="modal-header"><h2 id="modal-title">${title}</h2><button class="icon-button" data-action="close-modal" aria-label="창 닫기">${icon('x')}</button></header><div class="modal-body">${body}</div></section></div>`;
@@ -517,6 +580,7 @@ function openModal(title,body,wide=false) {
   setTimeout(()=>modalRoot.querySelector('input:not([type=hidden]),textarea,select,button')?.focus(),0);
 }
 function closeModal() {
+  interactionEpoch++;
   modal=null;
   modalRoot.replaceChildren();
   document.body.style.overflow='';
@@ -524,23 +588,29 @@ function closeModal() {
 }
 function partnerModal(partner,seed={}) {
   const p=partner||seed;
+  const linked=linkedBusiness(p.businessNumber,p);
   openModal(partner?'거래처 정보 수정':'새 거래처 등록',`<form id="partner-form" data-id="${esc(partner?.id||'')}"><div class="form-grid">
   <div class="form-field full-span"><label for="partner-number">사업자등록번호 <span class="muted">(필수)</span></label><input id="partner-number" name="businessNumber" inputmode="numeric" maxlength="20" required value="${esc(formatBusinessNumber(p.businessNumber||''))}" ${partner?'readonly':''} placeholder="000-00-00000"><span class="hint">번호 형식 검사는 국세청 상태 조회나 본인 인증과 다릅니다.</span></div>
-  <div class="form-field full-span"><label for="partner-name">업체명</label><input id="partner-name" name="name" maxlength="200" value="${esc(p.name||'')}" placeholder="공개자료 또는 서류에서 확인한 이름"><span class="hint">직접 입력한 이름은 사용자 제공 정보로 저장합니다.</span></div>
+  <div class="form-field full-span"><label for="partner-name">거래처 이름·별칭 <span class="muted">(선택)</span></label><input id="partner-name" name="name" maxlength="200" value="${esc(p.name||'')}" placeholder="${esc(linked.publicName||'직접 관리할 이름')}"><span class="hint">${linked.publicName?`비워 두면 번호가 일치하는 공개 상호 <strong>${esc(linked.publicName)}</strong>가 자동 표시됩니다.`:'공개 상호가 수집되면 같은 사업자번호로 자동 연결합니다.'} 직접 입력한 이름은 별도로 보존합니다.</span></div>
   <div class="form-field full-span"><label for="partner-tags">태그</label><input id="partner-tags" name="tags" maxlength="500" value="${esc((p.tags||[]).join(', '))}" placeholder="예: 정기 거래, 납품, 확인 필요"></div>
   <div class="form-field full-span"><label for="partner-note">메모</label><textarea id="partner-note" name="note" maxlength="5000" placeholder="다음에 확인할 내용이나 거래처 관련 메모">${esc(p.note||'')}</textarea></div></div><div id="partner-form-error" class="field-error" role="alert"></div><div class="modal-actions">${partner?`<button class="button danger" type="button" data-action="delete-confirm" data-id="${esc(partner.id)}">${icon('trash')} 삭제</button>`:''}<button class="button" type="button" data-action="close-modal">취소</button><button class="button primary" type="submit">${icon('check')} 저장</button></div></form>`);
 }
-function detailModal(partner) {
+function detailModal(partner,{refresh=false}={}) {
   if(!partner)return;
   const last=partner.lastCheck,success=partner.lastSuccess;
-  const insights=buildInsights(partner);
-  openModal('거래처 확인 기록',`<div class="profile-summary"><span class="company-avatar">${esc((partner.name||'사').slice(0,1))}</span><div><h2 style="font-size:18px">${esc(partner.name||'이름 미입력')}</h2><p class="number">${formatBusinessNumber(partner.businessNumber)}</p></div><div style="margin-left:auto">${badge(last)}</div></div>
-  <dl class="detail-grid"><div class="detail-fact"><dt>마지막 성공 조회의 상태</dt><dd>${esc(success?.statusLabel||'미확인')}<small>${esc(fmtTime(success?.checkedAt))}</small></dd></div><div class="detail-fact"><dt>과세유형</dt><dd>${esc(success?.taxType||'미확인')}</dd></div><div class="detail-fact"><dt>이름의 출처</dt><dd>사용자 입력<small>대표자·관리자 인증과 별개입니다.</small></dd></div><div class="detail-fact"><dt>등록일</dt><dd>${esc(fmtDate(partner.createdAt))}</dd></div></dl>
-  ${insights.map(i=>`<div class="insight-card ${esc(i.tone)}">${icon('info')}<div><h3>${esc(i.title)}</h3><p>${esc(i.description)}</p><div class="insight-action">${esc(i.action||'')}</div></div></div>`).join('')}
-  <div class="divider"></div><div class="section-row"><h3 style="font-size:13px">메모</h3><div class="chip-list">${(partner.tags||[]).map(t=>`<span class="badge neutral">${esc(t)}</span>`).join('')}</div></div><p style="white-space:pre-wrap;font-size:12px;color:#7c8f6d">${esc(partner.note||'등록된 메모가 없습니다.')}</p>
-  <div class="divider"></div><h3 style="font-size:13px;margin-bottom:12px">최근 조회 이력</h3>
+  const linked=linkedBusiness(partner.businessNumber,partner);
+  const body=`<div class="profile-summary"><span class="company-avatar">${esc(linked.displayName.slice(0,1))}</span><div><h2>${esc(linked.displayName)}</h2><p class="number">${formatBusinessNumber(partner.businessNumber)}</p>${publicNameLine(linked)}</div><div class="profile-status">${badge(last)}</div></div>
+  <dl class="detail-grid"><div class="detail-fact"><dt>마지막 성공 조회의 상태</dt><dd>${esc(success?.statusLabel||'미확인')}<small>${esc(fmtTime(success?.checkedAt))}</small></dd></div><div class="detail-fact"><dt>과세유형</dt><dd>${esc(success?.taxType||'미확인')}</dd></div><div class="detail-fact"><dt>표시 이름의 출처</dt><dd>${esc(linked.nameSourceLabel)}<small>${linked.nameSourceUrl?external(linked.nameSourceUrl,'상호 출처 확인'):linked.userName?'직접 입력한 관리용 이름입니다.':'사업자번호가 일치하는 공개 상호를 기다리고 있습니다.'}${linked.nameCollectedAt?' · '+esc(fmtTime(linked.nameCollectedAt)):''}</small></dd></div><div class="detail-fact"><dt>거래처 등록일</dt><dd>${esc(fmtDate(partner.createdAt))}</dd></div></dl>
+  ${businessInsightView(partner.businessNumber,last,true)}
+  ${businessInformation(partner.businessNumber)}
+  <div class="divider"></div><div class="section-row"><h3>내 거래 메모</h3><div class="chip-list">${(partner.tags||[]).map(t=>`<span class="badge neutral">${esc(t)}</span>`).join('')}</div></div><p class="partner-note">${esc(partner.note||'등록된 메모가 없습니다.')}</p>
+  <div class="divider"></div><h3 class="section-title">최근 조회 이력</h3>
   ${partner.history?.length?`<div class="table-wrap"><table><thead><tr><th>조회시각</th><th>결과</th><th>출처</th></tr></thead><tbody>${partner.history.slice(0,10).map(h=>`<tr><td>${esc(fmtTime(h.checkedAt))}</td><td>${badge(h)}</td><td>${external(getSourceUrl(h),getSourceName(h.source))}</td></tr>`).join('')}</tbody></table></div>`:'<p class="fine-print">아직 조회 이력이 없습니다.</p>'}
-  <div class="modal-actions"><button class="button" data-action="edit-partner" data-id="${esc(partner.id)}">${icon('edit')} 정보 수정</button><button class="button primary" data-action="check-one" data-id="${esc(partner.id)}">${icon('refresh')} 다시 확인</button></div>`,true);
+  <div class="modal-actions"><button class="button" data-action="edit-partner" data-id="${esc(partner.id)}">${icon('edit')} 정보 수정</button><button class="button primary" data-action="check-one" data-id="${esc(partner.id)}">${icon('refresh')} 다시 확인</button></div>`;
+  if(refresh&&modal?.detailId===partner.id){
+    const target=modalRoot.querySelector('.modal-body');
+    if(target){const container=modalRoot.querySelector('.modal');const scroll=container?.scrollTop||0;const bodyScroll=target.scrollTop;target.innerHTML=body;target.scrollTop=bodyScroll;if(container)container.scrollTop=scroll;modal.body=body;}
+  }else{openModal('거래처 통합 정보',body,true);modal.detailId=partner.id;}
 }
 let importState={text:'',parsed:null};
 function importModal() {
@@ -571,14 +641,14 @@ function connectionModal() {
   if(window.BIZHANNUN_CONFIG?.mode==='direct'){toast('브라우저에서 국세청으로 직접 조회합니다.');return;}
   openModal('조회 서버 연결',`<form id="connection-form"><div class="callout">${icon('shield')}<span>서버의 HTTPS 주소만 입력합니다. 국세청·공정위 인증키는 여기에 입력하지 마세요.</span></div><div class="form-field" style="margin-top:17px"><label for="api-base">API 서버 주소</label><input id="api-base" name="apiBase" type="url" value="${esc(currentApiBase())}" placeholder="https://api.example.com"><span class="hint">입력한 서버로 조회할 사업자번호가 전달됩니다. 본인이 운영하거나 신뢰하는 서버만 사용하세요.</span></div><div id="connection-error" class="field-error" role="alert"></div><div class="modal-actions"><button class="button" type="button" data-action="close-modal">취소</button><button class="button primary" type="submit">저장하고 연결 확인</button></div></form>`);
 }
-function enrichmentRequestModal(){
-  if(!ui.lookup)return;
-  const name=ui.enrichment?.summary?.profile?.name||byNumber(ui.lookup.businessNumber)?.name||'';
-  openModal('웹 정보 수집 요청',`<form id="enrichment-request-form"><p class="fine-print">사업자번호와 아래 입력은 공개 수집 요청으로 기록됩니다. 내부 메모·비공개 연락처는 입력하지 마세요. 운영자 계정의 요청은 자동 수집하며, 일반 요청은 운영자 확인 후 수집합니다.</p><div class="form-grid section-spacer"><div class="form-field full-span"><label for="enrich-bno">사업자등록번호</label><input id="enrich-bno" name="businessNumber" readonly value="${esc(ui.lookup.businessNumber)}"></div><div class="form-field full-span"><label for="enrich-name">상호</label><input id="enrich-name" name="name" maxlength="200" value="${esc(name)}"></div><div class="form-field full-span"><label for="enrich-url">수집할 공개 웹사이트 (선택)</label><input id="enrich-url" name="website" type="url" maxlength="2048" placeholder="https://회사홈페이지 또는 사업자정보 페이지"></div></div><p class="fine-print">회사소개·연락처·제품·채용·SNS 링크를 수집합니다. 접근이 제한된 페이지는 건너뛰며, 결과는 수집·배포 후 이 화면에 반영됩니다.</p><div class="modal-actions"><button class="button" type="button" data-action="close-modal">취소</button><button class="button primary" type="submit">공개 요청 작성 화면 열기 ↗</button></div></form>`);
+function enrichmentRequestModal(bno=ui.lookup?.businessNumber){
+  if(!isValidBusinessNumber(bno))return;
+  const name=linkedBusiness(bno).publicName||'';
+  openModal('웹 정보 수집 요청',`<form id="enrichment-request-form"><p class="fine-print">사업자번호와 아래 입력은 공개 수집 요청으로 기록됩니다. 내부 메모·비공개 연락처는 입력하지 마세요. 운영자 계정의 요청은 자동 수집하며, 일반 요청은 운영자 확인 후 수집합니다.</p><div class="form-grid section-spacer"><div class="form-field full-span"><label for="enrich-bno">사업자등록번호</label><input id="enrich-bno" name="businessNumber" readonly value="${esc(bno)}"></div><div class="form-field full-span"><label for="enrich-name">상호</label><input id="enrich-name" name="name" maxlength="200" value="${esc(name)}"></div><div class="form-field full-span"><label for="enrich-url">수집할 공개 웹사이트 (선택)</label><input id="enrich-url" name="website" type="url" maxlength="2048" placeholder="https://회사홈페이지 또는 사업자정보 페이지"></div></div><p class="fine-print">회사소개·연락처·제품·채용·SNS 링크를 수집합니다. 접근이 제한된 페이지는 건너뛰며, 결과는 수집·배포 후 이 화면에 반영됩니다.</p><div class="modal-actions"><button class="button" type="button" data-action="close-modal">취소</button><button class="button primary" type="submit">공개 요청 작성 화면 열기 ↗</button></div></form>`);
 }
-function validateModal() {
-  if(!ui.lookup)return;
-  openModal('등록정보 진위 대조',`<form id="validate-form"><p class="fine-print">사업자등록증의 개업일과 대표자명을 국세청 입력값과 대조합니다. 대표자 본인 인증이나 문서 원본 인증 기능은 아닙니다.</p><div class="form-grid" style="margin-top:17px"><div class="form-field full-span"><label>사업자등록번호</label><input readonly name="b_no" value="${formatBusinessNumber(ui.lookup.businessNumber)}"></div><div class="form-field"><label for="validation-date">개업일</label><input id="validation-date" name="start_dt" type="date" required></div><div class="form-field"><label for="validation-name">대표자명</label><input id="validation-name" name="p_nm" maxlength="100" required autocomplete="off"></div></div><p class="fine-print" style="margin-top:12px">확인 버튼을 누르면 입력값을 조회 서버를 통해 국세청으로 전달합니다. 대표자명·개업일은 이 앱의 거래처 기록에 저장하지 않습니다.</p><div id="validation-result" aria-live="polite"></div><div class="modal-actions"><button class="button" type="button" data-action="close-modal">닫기</button><button class="button primary" type="submit">입력정보 확인</button></div></form>`);
+function validateModal(bno=ui.lookup?.businessNumber) {
+  if(!isValidBusinessNumber(bno))return;
+  openModal('등록정보 진위 대조',`<form id="validate-form"><p class="fine-print">사업자등록증의 개업일과 대표자명을 국세청 입력값과 대조합니다. 대표자 본인 인증이나 문서 원본 인증 기능은 아닙니다.</p><div class="form-grid" style="margin-top:17px"><div class="form-field full-span"><label>사업자등록번호</label><input readonly name="b_no" value="${formatBusinessNumber(bno)}"></div><div class="form-field"><label for="validation-date">개업일</label><input id="validation-date" name="start_dt" type="date" required></div><div class="form-field"><label for="validation-name">대표자명</label><input id="validation-name" name="p_nm" maxlength="100" required autocomplete="off"></div></div><p class="fine-print" style="margin-top:12px">확인 버튼을 누르면 입력값을 국세청 조회 서비스로 전달합니다. 대표자명·개업일은 이 앱의 거래처 기록에 저장하지 않습니다.</p><div id="validation-result" aria-live="polite"></div><div class="modal-actions"><button class="button" type="button" data-action="close-modal">닫기</button><button class="button primary" type="submit">입력정보 확인</button></div></form>`);
 }
 function privacyModal() {
   openModal('개인정보와 보관 안내',`<div class="source-list"><div><h3>내 브라우저에 보관하는 정보</h3><p class="fine-print">거래처 목록, 메모, 입력 프로필, 확인 이력은 이 기기의 IndexedDB에 저장합니다. 로그인하면 Firebase UID별 Firestore 공간에 거래처·메모·프로필·조회 이력을 저장합니다. 비로그인 자료는 기기에 보관하고 명시적으로 가져올 때만 계정에 추가합니다. 팀 공동 작업은 제공하지 않습니다. 브라우저 데이터를 삭제하면 기록이 없어질 수 있으니 백업 파일을 보관하세요.</p></div><div><h3>조회할 때 전달하는 정보</h3><p class="fine-print">상태조회는 사업자번호, 진위 대조는 사용자가 입력한 번호·개업일·대표자명을 설정된 조회 서버와 해당 기관으로 전달합니다. 내 사업 매출·직원 수·거래 메모는 조회 기관에 전송하지 않습니다. 로그인 후 저장하는 업무 정보는 내 계정의 Firestore 공간으로 전달합니다.</p></div><div><h3>백업과 삭제</h3><p class="fine-print">거래처 관리에서 CSV 내보내기 또는 전체 JSON 백업을 할 수 있습니다. 개별 거래처 삭제 시 해당 거래처의 메모·확인 이력·변경 기록도 함께 삭제합니다. 백업에는 내부 메모가 포함되므로 필요한 사람에게만 전달하세요.</p></div><div><h3>공개정보의 해석</h3><p class="fine-print">사업자한눈은 독립적인 민간 서비스입니다. 정보의 기준일·출처를 확인하세요. 사업자 상태와 통신판매 신고는 거래 안전성이나 신용등급을 의미하지 않습니다.</p></div></div><div class="modal-actions"><button class="button primary" data-action="close-modal">확인</button></div>`);
@@ -588,6 +658,7 @@ function helpModal() {
 }
 function go(view) {
   if(!titles[view])return;
+  interactionEpoch++;
   if(modal)closeModal();
   ui.mobileMenu=false;
   ui.view=view;
@@ -624,30 +695,49 @@ function dedupeEvents(existing,events) {
   const seen=new Set(existing.map(e=>e.id));
   return [...events.filter(e=>!seen.has(e.id)),...existing].slice(0,1000);
 }
-async function refreshEnrichment(bno,serial=lookupSerial){
+async function refreshPublicIndex({force=false}={}) {
+  if(publicIndexPromise)return publicIndexPromise;
+  if(publicIndexLoaded&&!force)return true;
+  publicIndexLoading=true;render();
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),15_000);
+  publicIndexPromise=(async()=>{
+    try{
+      const result=await loadEnrichmentIndex({signal:controller.signal});
+      if(publicIndexLoaded&&result.meta.status==='not_collected')throw new Error('공개 수집본을 찾을 수 없습니다.');
+      // Build complete maps before replacing the last successful snapshot.
+      const records=new Map(),summaries=new Map();
+      for(const record of result.records){records.set(record.businessNumber,record);summaries.set(record.businessNumber,summarizeEnrichment(record));}
+      publicRecords=records;publicSummaries=summaries;publicMeta=result.meta;
+      publicIndexLoaded=true;publicIndexError='';ui.nameSearchError='';businessIndexCache=null;
+      if(ui.lookup)ui.enrichment=publicBusiness(ui.lookup.businessNumber);
+      return true;
+    }catch{
+      publicIndexError=publicIndexLoaded?'공개자료 갱신에 실패했습니다. 이전에 불러온 정보와 수집 시각을 유지합니다.':'공개 사업자 정보를 불러오지 못했습니다. 자료 새로고침으로 다시 시도해 주세요.';
+      return false;
+    }finally{
+      clearTimeout(timeout);publicIndexLoading=false;publicIndexPromise=null;render();
+      if(modal?.detailId&&byId(modal.detailId))detailModal(byId(modal.detailId),{refresh:true});
+    }
+  })();
+  return publicIndexPromise;
+}
+async function refreshEnrichment(bno,serial=lookupSerial,{force=false}={}){
   ui.enrichmentBusy=true;
-  try{const result=await loadEnrichment(bno);if(serial!==lookupSerial)return;ui.enrichment=result;ui.enrichmentError='';}
-  catch{if(serial===lookupSerial)ui.enrichmentError='공개 정보 수집본을 불러오지 못했습니다. 잠시 후 자료 새로고침을 눌러 주세요.';}
-  finally{if(serial===lookupSerial){ui.enrichmentBusy=false;render();}}
+  await refreshPublicIndex({force});
+  if(serial!==lookupSerial)return;
+  if(!ui.lookup||ui.lookup.businessNumber===bno)ui.enrichment=publicBusiness(bno);
+  ui.enrichmentError=publicIndexError;ui.enrichmentBusy=false;render();
 }
 function clearLookupResult(){
   ui.lookup=null;ui.lookupBusy=false;ui.commerce=null;ui.lookupSelection=null;
   ui.enrichment=null;ui.enrichmentBusy=false;ui.enrichmentError='';
 }
-async function getBusinessCatalog(refresh=false){
-  if(businessCatalogPromise)return businessCatalogPromise;
-  if(businessCatalog&&!refresh)return businessCatalog;
-  const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),15_000);
-  businessCatalogPromise=loadEnrichmentCatalog({signal:controller.signal}).then(catalog=>{
-    businessCatalog=catalog;businessIndexCache=null;return catalog;
-  }).finally(()=>{clearTimeout(timeout);businessCatalogPromise=null;});
-  return businessCatalogPromise;
-}
 async function submitLookup(value,{refresh=false,type=ui.lookupType}={}){
   if(lookupComposing)return;
   const parsed=classifyBusinessQuery(value,{type});
   const serial=++lookupSerial;
+  interactionEpoch++;
   ui.lookupQuery=String(value??'');ui.lookupError='';ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';ui.nameSearchPage=1;
   clearLookupResult();
   if(parsed.kind==='invalid'){
@@ -656,10 +746,10 @@ async function submitLookup(value,{refresh=false,type=ui.lookupType}={}){
   }
   if(parsed.kind==='number'){await lookup(parsed.businessNumber);return;}
   ui.nameQuery=parsed.query;ui.nameSearchBusy=true;render();
-  try{await getBusinessCatalog(refresh);}
+  try{if(!await refreshPublicIndex({force:refresh}))throw new Error(publicIndexError);}
   catch{
     if(serial!==lookupSerial)return;
-    ui.nameSearchError='공개 검색자료를 새로 불러오지 못했습니다.'+(businessCatalog?' 이전에 불러온 공개자료를 함께 표시합니다.':' 자료 새로고침으로 다시 시도해 주세요.');
+    ui.nameSearchError=publicIndexError||'공개 검색자료를 새로 불러오지 못했습니다. 자료 새로고침으로 다시 시도해 주세요.';
   }finally{
     if(serial===lookupSerial){
       ui.nameSearchBusy=false;render();
@@ -675,6 +765,7 @@ async function lookup(value,{candidate=null}={}) {
     return;
   }
   const serial=++lookupSerial;
+  interactionEpoch++;
   ui.lookupError='';ui.nameSearchBusy=false;ui.lookupSelection=candidate;
   ui.lookupBusy=true;ui.lookup=null;ui.commerce=null;ui.enrichment=null;ui.enrichmentError='';ui.enrichmentBusy=true;render();
   void refreshEnrichment(bno,serial);
@@ -815,10 +906,10 @@ document.addEventListener('input',event=>{
   const t=event.target;
   if(t.closest('#profile-form'))captureProfileDraft(t.closest('form'));
   if(t.id==='business-query'){
-    ui.lookupQuery=t.value;ui.lookupError='';t.removeAttribute('aria-invalid');
+    interactionEpoch++;ui.lookupQuery=t.value;ui.lookupError='';t.removeAttribute('aria-invalid');
     const error=document.getElementById('lookup-error');if(error)error.textContent='';
   }
-  if(t.id==='partner-search'){ui.partnerQuery=t.value;render();}
+  if(t.id==='partner-search'){interactionEpoch++;ui.partnerQuery=t.value;render();}
   if(t.id==='program-search'){ui.programQuery=t.value;ui.page=1;render();}
   if(t.id==='import-text'){importState.parsed=null;document.getElementById('confirm-import').disabled=true;document.getElementById('import-preview').replaceChildren();}
 });
@@ -831,11 +922,11 @@ document.addEventListener('compositionend',event=>{
 document.addEventListener('change',async event=>{
   const t=event.target;
   if(t.id==='lookup-type'){
-    lookupSerial++;ui.lookupType=t.value;ui.lookupError='';ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';clearLookupResult();
+    lookupSerial++;interactionEpoch++;ui.lookupType=t.value;ui.lookupError='';ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';clearLookupResult();
     render();document.getElementById('business-query')?.focus({preventScroll:true});return;
   }
   if(t.closest('#profile-form'))captureProfileDraft(t.closest('form'));
-  if(t.id==='partner-status'){ui.partnerStatus=t.value;render();}
+  if(t.id==='partner-status'){interactionEpoch++;ui.partnerStatus=t.value;render();}
   if(t.id==='open-only'){ui.openOnly=t.checked;ui.page=1;render();}
   if(t.classList.contains('partner-check')){t.checked?selected.add(t.dataset.id):selected.delete(t.dataset.id);render();}
   if(t.id==='select-all'){for(const p of filteredPartners()){t.checked?selected.add(p.id):selected.delete(p.id);}render();}
@@ -880,8 +971,14 @@ document.addEventListener('click',async event=>{
   if(action==='close-modal'){closeModal();return;}
   if(action==='toggle-menu'){ui.mobileMenu=!ui.mobileMenu;render();return;}
   if(action==='goto-history'){go('history');return;}
-  if(action==='lookup-mode'){ui.mode=element.dataset.mode;render();return;}
-  if(action==='close-result'){lookupSerial++;clearLookupResult();render();return;}
+  if(action==='insight-filter'){
+    const filter=element.dataset.filter;
+    if(!['all','refresh','linked','conflict','missing'].includes(filter))return;
+    interactionEpoch++;ui.partnerInsight=filter;ui.partnerStatus='all';ui.partnerQuery='';selected.clear();
+    if(ui.view!=='partners')go('partners');else render();return;
+  }
+  if(action==='lookup-mode'){interactionEpoch++;ui.mode=element.dataset.mode;render();return;}
+  if(action==='close-result'){lookupSerial++;interactionEpoch++;clearLookupResult();render();return;}
   if(action==='select-name-result'){
     const candidate=currentNameSearch().result.results.find(entry=>entry.businessNumber===element.dataset.number);
     if(candidate)await lookup(candidate.businessNumber,{candidate});
@@ -889,38 +986,70 @@ document.addEventListener('click',async event=>{
   }
   if(action==='retry-name-search'){if(ui.nameQuery)await submitLookup(ui.nameQuery,{refresh:true,type:'name'});return;}
   if(action==='name-search-prev'||action==='name-search-next'){
-    ui.nameSearchPage=Math.max(1,ui.nameSearchPage+(action==='name-search-next'?1:-1));render();document.getElementById('name-results-title')?.focus({preventScroll:true});return;
+    interactionEpoch++;ui.nameSearchPage=Math.max(1,ui.nameSearchPage+(action==='name-search-next'?1:-1));render();document.getElementById('name-results-title')?.focus({preventScroll:true});return;
   }
   if(action==='search-by-number'){
-    lookupSerial++;clearLookupResult();ui.lookupType='number';ui.lookupQuery='';ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';ui.lookupError='';
+    lookupSerial++;interactionEpoch++;clearLookupResult();ui.lookupType='number';ui.lookupQuery='';ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';ui.lookupError='';
     render();document.getElementById('business-query')?.focus({preventScroll:true});return;
   }
   if(action==='add-partner-from-search'){partnerModal(null,{name:ui.nameQuery});return;}
   if(action==='add-partner'){partnerModal();return;}
   if(action==='edit-partner'){partnerModal(byId(id));return;}
   if(action==='detail'){detailModal(byId(id));return;}
-  if(action==='reload-enrichment'){if(ui.lookup)await refreshEnrichment(ui.lookup.businessNumber);return;}
-  if(action==='enrichment-export'){if(ui.enrichment?.record)downloadText('사업자한눈_공개정보_'+ui.lookup.businessNumber+'.json',JSON.stringify(ui.enrichment.record,null,2),'application/json');return;}
-  if(action==='save-enrichment-note'){
-    if(!ui.lookup||!ui.enrichment?.summary)return;
-    const old=byNumber(ui.lookup.businessNumber),note=[old?.note,enrichmentNote(ui.enrichment.summary)].filter(Boolean).join('\n\n');
-    if(note.length>5000){toast('기존 메모와 공개자료를 합치면 5,000자를 초과합니다. 수집 자료 JSON을 보관해 주세요.',true);return;}
-    partnerModal(old?{...old,name:old.name||ui.enrichment.summary.profile.name||'',note}:null,{businessNumber:ui.lookup.businessNumber,name:ui.enrichment.summary.profile.name||'',note});return;
-  }
-  if(action==='enrichment-request'){enrichmentRequestModal();return;}
-  if(action==='save-lookup'){if(ui.lookup)partnerModal(byNumber(ui.lookup.businessNumber),{businessNumber:ui.lookup.businessNumber,name:ui.enrichment?.summary?.profile?.name||ui.commerce?.records?.[0]?.name||ui.lookupSelection?.name||''});return;}
-  if(action==='use-mine'){
-    if(!ui.lookup)return;
-    const name=ui.enrichment?.summary?.profile?.name||ui.commerce?.records?.[0]?.name||ui.lookupSelection?.name||byNumber(ui.lookup.businessNumber)?.name||(workspace.profile.businessNumber===ui.lookup.businessNumber?workspace.profile.name:'')||'';
-    if(await persist({...workspace,profile:{...workspace.profile,businessNumber:ui.lookup.businessNumber,name,providedBy:'user'}}))go('profile');
+  const contextBno=normalizeBusinessNumber(element.dataset.bno||byId(modal?.detailId)?.businessNumber||ui.lookup?.businessNumber||'');
+  if(action==='reload-enrichment'){
+    if(isValidBusinessNumber(contextBno))await refreshEnrichment(contextBno,lookupSerial,{force:true});
+    else await refreshPublicIndex({force:true});
     return;
   }
-  if(action==='check-one'){const epoch=accountEpoch;closeModal();await batchCheck([id]);if(epoch===accountEpoch&&byId(id))detailModal(byId(id));return;}
+  if(action==='enrichment-export'){
+    const data=publicBusiness(contextBno);
+    if(data.record)downloadText('사업자한눈_공개정보_'+contextBno+'.json',JSON.stringify(data.record,null,2),'application/json');
+    return;
+  }
+  if(action==='save-enrichment-note'){
+    const summary=linkedBusiness(contextBno).summary;
+    if(!summary)return;
+    const old=byNumber(contextBno),publicNote=enrichmentNote(summary);
+    const note=old?.note?.includes(publicNote)?old.note:[old?.note,publicNote].filter(Boolean).join('\n\n');
+    if(note.length>5000){toast('기존 메모와 공개자료를 합치면 5,000자를 초과합니다. 수집 자료 JSON을 보관해 주세요.',true);return;}
+    partnerModal(old?{...old,note}:null,{businessNumber:contextBno,name:'',note});return;
+  }
+  if(action==='enrichment-request'){enrichmentRequestModal(contextBno);return;}
+  if(action==='save-lookup'){
+    if(ui.lookup)partnerModal(byNumber(ui.lookup.businessNumber),{businessNumber:ui.lookup.businessNumber,name:''});
+    return;
+  }
+  if(action==='insight-refresh-status'){
+    if(!isValidBusinessNumber(contextBno))return;
+    const partner=byNumber(contextBno);
+    if(modal?.detailId&&partner){const epoch=accountEpoch;closeModal();const interaction=interactionEpoch;await batchCheck([partner.id]);if(epoch===accountEpoch&&interaction===interactionEpoch&&!modal&&byId(partner.id))detailModal(byId(partner.id));}
+    else{if(modal)closeModal();if(ui.view!=='lookup')go('lookup');await lookup(contextBno);}
+    return;
+  }
+  if(action==='validate-registration'){validateModal(contextBno);return;}
+  if(action==='insight-view-sources'){
+    const root=modal?.detailId?modalRoot:app;
+    const target=({'field-conflicts':'.insight-conflicts','collection-incomplete':'.enrichment-coverage'})[element.dataset.insightId]||'.enrichment-sources';
+    const sources=root.querySelector(target);
+    if(sources){sources.open=true;sources.scrollIntoView({behavior:'smooth',block:'start'});}
+    else toast('연결된 출처가 아직 없습니다. 웹 정보 수집 요청으로 자료를 보강해 주세요.');
+    return;
+  }
+  if(action==='use-mine'){
+    if(!ui.lookup)return;
+    const linked=linkedBusiness(ui.lookup?.businessNumber), facts=linked.summary?.profile||{};
+    const existing=normalizeBusinessNumber(workspace.profile.businessNumber)===ui.lookup.businessNumber?workspace.profile:{};
+    const addressRegion=Object.entries({'서울':'서울','부산':'부산','대구':'대구','인천':'인천','광주':'광주','대전':'대전','울산':'울산','세종':'세종','경기도':'경기','강원':'강원','충청북도':'충북','충청남도':'충남','전북':'전북','전라북도':'전북','전라남도':'전남','경상북도':'경북','경상남도':'경남','제주':'제주'}).find(([prefix])=>facts.address?.startsWith(prefix))?.[1]||'';
+    ui.profileDraft={...existing,businessNumber:ui.lookup.businessNumber,name:linked.publicName||existing.name||'',industry:facts.businessCategory||facts.industry||existing.industry||'',region:addressRegion||existing.region||''};
+    go('profile');toast('연결된 정보로 입력했습니다. 내용을 확인한 뒤 내 사업 프로필을 저장해 주세요.');return;
+  }
+  if(action==='check-one'){const epoch=accountEpoch;closeModal();const interaction=interactionEpoch;await batchCheck([id]);if(epoch===accountEpoch&&interaction===interactionEpoch&&!modal&&byId(id))detailModal(byId(id));return;}
   if(action==='batch-check'){await batchCheck(element.dataset.scope==='selected'?[...selected]:workspace.partners.map(p=>p.id));return;}
   if(action==='deselect'){selected.clear();render();return;}
   if(action==='delete-confirm'){
     const p=byId(id);if(!p)return;
-    openModal('거래처 삭제',`<p style="font-size:13px"><strong>${esc(p.name||formatBusinessNumber(p.businessNumber))}</strong>의 메모, 확인 이력과 변경 기록을 현재 ${authState.user?'계정':'기기'} 자료에서 삭제합니다.</p><div class="modal-actions"><button class="button" data-action="close-modal">취소</button><button class="button danger" data-action="delete-partner" data-id="${esc(id)}">삭제</button></div>`);return;
+    openModal('거래처 삭제',`<p style="font-size:13px"><strong>${esc(linkedBusiness(p.businessNumber,p).displayName)}</strong>의 메모, 확인 이력과 변경 기록을 현재 ${authState.user?'계정':'기기'} 자료에서 삭제합니다.</p><div class="modal-actions"><button class="button" data-action="close-modal">취소</button><button class="button danger" data-action="delete-partner" data-id="${esc(id)}">삭제</button></div>`);return;
   }
   if(action==='delete-partner'){
     if(await persist({...workspace,partners:workspace.partners.filter(p=>p.id!==id),events:workspace.events.filter(e=>e.partnerId!==id)})){selected.delete(id);closeModal();toast('거래처와 관련 기록을 삭제했습니다.');}return;
@@ -935,7 +1064,7 @@ document.addEventListener('click',async event=>{
     if(await persist({...workspace,partners:[...fresh,...workspace.partners]})){closeModal();toast(`새 거래처 ${fresh.length}곳을 등록했습니다.`);}return;
   }
   if(action==='csv-template'){downloadText('사업자한눈_거래처_양식.csv','\uFEFF사업자등록번호,업체명,태그,메모\r\n','text/csv;charset=utf-8');return;}
-  if(action==='export-csv'){downloadText('사업자한눈_거래처_'+new Date().toISOString().slice(0,10)+'.csv',exportPartnersCsv(workspace.partners),'text/csv;charset=utf-8');return;}
+  if(action==='export-csv'){downloadText('사업자한눈_거래처_'+new Date().toISOString().slice(0,10)+'.csv',exportPartnersCsv(workspace.partners.map(p=>{const linked=linkedBusiness(p.businessNumber,p);return {...p,displayName:linked.displayName==='이름 미입력'?'':linked.displayName,publicName:linked.publicName,publicNameSourceUrl:linked.publicNameSourceUrl,publicNameCollectedAt:linked.publicNameCollectedAt};}),{includeLinkedInfo:true}),'text/csv;charset=utf-8');return;}
   if(action==='backup'){downloadText('사업자한눈_전체백업_'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify({...workspace,preferences:{}},null,2),'application/json');toast('전체 백업 파일을 만들었습니다. 내부 메모가 포함되어 있습니다.');return;}
   if(action==='restore-open'){
     openModal('백업 복원',`<p class="fine-print">사업자한눈에서 내보낸 JSON 백업 파일을 선택하세요. 복원 시 현재 거래처·프로필·확인 기록이 파일 내용으로 교체됩니다.</p><div class="form-field" style="margin-top:15px"><label for="restore-file">백업 파일</label><input id="restore-file" type="file" accept=".json,application/json"></div><div id="restore-preview"></div><div class="modal-actions"><button class="button" data-action="backup">먼저 현재 정보 백업</button><button class="button primary" id="confirm-restore" data-action="restore-confirm" disabled>확인한 백업으로 교체</button></div>`);return;
@@ -952,7 +1081,7 @@ document.addEventListener('click',async event=>{
     const events=workspace.events.map(e=>(action==='acknowledge-all'||e.id===id)&&!e.acknowledgedAt?{...e,acknowledgedAt:new Date().toISOString()}:e);
     if(await persist({...workspace,events}))toast('확인한 기록으로 표시했습니다.');return;
   }
-  if(action==='refresh-health'){await checkHealth();return;}
+  if(action==='refresh-health'){await Promise.allSettled([checkHealth(),refreshPublicIndex({force:true})]);return;}
   if(action==='connection-settings'){connectionModal();return;}
   if(action==='validate-open'){validateModal();return;}
   if(action==='privacy'){privacyModal();return;}
@@ -969,7 +1098,7 @@ document.addEventListener('keydown',event=>{
 });
 window.addEventListener('hashchange',()=>{
   const view=location.hash.slice(1).split('?')[0];
-  if(titles[view]){ui.view=view;ui.mobileMenu=false;if(modal)closeModal();render();}
+  if(titles[view]){interactionEpoch++;ui.view=view;ui.mobileMenu=false;if(modal)closeModal();render();}
 });
 
 try {workspace=await loadWorkspace();guestWorkspace=structuredClone(workspace);}
@@ -977,5 +1106,5 @@ catch(error){storageError='이 브라우저에서 기록을 불러오지 못했�
 if(!titles[ui.view])ui.view='lookup';
 render();
 authClient=createAuthClient({publicConfig:window.BIZHANNUN_CONFIG?.auth,apiBase:window.BIZHANNUN_CONFIG?.apiBase||'',onStateChange:receiveAuthState});
-Promise.allSettled([checkHealth(),refreshPrograms(),authClient.init()]);
+Promise.allSettled([checkHealth(),refreshPrograms(),refreshPublicIndex(),authClient.init()]);
 

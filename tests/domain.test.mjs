@@ -198,3 +198,16 @@ test('insights distinguish missing data and failed checks from the last known st
   assert.equal(buildInsights(missing)[0].id, 'record-not-found');
   assert.equal(buildInsights(missing).some((item) => item.id === 'status-closed'), false);
 });
+
+test('linked CSV preserves the private name column across re-import and keeps public evidence separate', () => {
+  const partner = {businessNumber:'6901100416',name:'',displayName:'서해박속낙지전문점',publicName:'서해박속낙지전문점',publicNameSourceUrl:'https://bizno.net/article/6901100416',publicNameCollectedAt:'2026-10-21T13:22:53.376Z',tags:['납품'],note:'개인 메모'};
+  const csv = exportPartnersCsv([partner], {includeLinkedInfo:true});
+  assert.match(csv,/공개상호 출처/);
+  assert.match(csv,/https:\/\/bizno.net\/article\/6901100416/);
+  const restored = parseBusinessImport(csv);
+  assert.equal(restored.errors.length,0);
+  assert.equal(restored.rows[0].name,'');
+  assert.equal(restored.rows[0].note,'개인 메모');
+  const alias = parseBusinessImport(exportPartnersCsv([{...partner,name:'우리 단골'}],{includeLinkedInfo:true}));
+  assert.equal(alias.rows[0].name,'우리 단골');
+});

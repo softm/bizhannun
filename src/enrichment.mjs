@@ -58,8 +58,12 @@ function timestamp(value) {
   return Number.isFinite(+date) ? date.toISOString() : null;
 }
 function matchLevel(source, bno, domain) {
+  const reported = [source.businessNumber, source.matchedBusinessNumber].filter(value => value != null && value !== '');
+  if (source.identityMismatch === true || reported.some(value => normalizeBusinessNumber(value) !== bno)) return 'candidate';
   if (source.match === 'exact_bno') {
     const matched = normalizeBusinessNumber(source.businessNumber ?? source.matchedBusinessNumber);
+    if (source.businessNumber != null && source.matchedBusinessNumber != null
+      && normalizeBusinessNumber(source.businessNumber) !== normalizeBusinessNumber(source.matchedBusinessNumber)) return 'candidate';
     return matched === bno ? 'exact_bno' : 'candidate';
   }
   if (source.match === 'confirmed_domain' && domain && hostOf(source.url) === domain) return 'confirmed_domain';
@@ -79,6 +83,8 @@ export function normalizeEnrichment(input) {
   if (!object(input)) return null;
   const businessNumber = normalizeBusinessNumber(input.businessNumber ?? input.bno);
   if (!isValidBusinessNumber(businessNumber)) return null;
+  if (input.businessNumber != null && input.bno != null
+    && normalizeBusinessNumber(input.businessNumber) !== normalizeBusinessNumber(input.bno)) return null;
   const domain = officialHost(input);
   const entityType = ['corporation', 'business'].includes(input.entityType) ? input.entityType : 'unknown';
   const sources = [], ids = new Set();
@@ -94,6 +100,14 @@ export function normalizeEnrichment(input) {
       scope: raw.scope === 'public_business' ? 'public_business' : null };
     // Keep enough identity evidence to make repeated normalization lossless.
     if (source.match === 'exact_bno') source.businessNumber = businessNumber;
+    else if (raw.identityMismatch === true || [raw.businessNumber, raw.matchedBusinessNumber]
+      .filter(value => value != null && value !== '').some(value => normalizeBusinessNumber(value) !== businessNumber)) {
+      source.identityMismatch = true;
+      for (const key of ['businessNumber', 'matchedBusinessNumber']) {
+        const reported = normalizeBusinessNumber(raw[key]);
+        if (/^\d{10}$/.test(reported)) source[key] = reported;
+      }
+    }
     const discoveredFrom = safeEnrichmentUrl(raw.discoveredFrom);
     if (discoveredFrom) source.discoveredFrom = discoveredFrom;
     sources.push(source);
@@ -161,7 +175,8 @@ export function summarizeEnrichment(input) {
       conflict: new Set(confirmed.map(value => valueKey(field, value.value))).size > 1,
       alternatives: confirmed.slice(1) });
   }
-  return { businessNumber: record.businessNumber, profile, fields, sources: record.sources,
+  return { businessNumber: record.businessNumber, entityType: record.entityType, officialDomain: record.officialDomain,
+    profile, fields, sources: record.sources,
     candidates: record.sources.filter(source => source.match === 'candidate'),
     candidateFields: record.fields.filter(field => field.match === 'candidate'),
     confirmedCount: record.sources.filter(source => source.match !== 'candidate').length,
@@ -192,7 +207,7 @@ async function readBoundedJson(response) {
   } finally { reader.releaseLock(); }
 }
 
-/** Read the same bounded public snapshot for both name search and exact-number detail. */
+/** Read one bounded, validated public snapshot for name search and every number-based view. */
 export async function loadEnrichmentCatalog({ fetcher = globalThis.fetch,
   url = new URL('../data/enrichment/index.json', import.meta.url), signal } = {}) {
   const response = await fetcher(url, { cache: 'no-cache', credentials: 'omit', ...(signal ? { signal } : {}) });
@@ -220,11 +235,17 @@ export async function loadEnrichmentCatalog({ fetcher = globalThis.fetch,
   return { records, meta };
 }
 
+/** Compatibility interface for workspace joins; validation stays in the catalog loader. */
+export async function loadEnrichmentIndex(options = {}) {
+  const { records, meta } = await loadEnrichmentCatalog(options);
+  return { records, meta: { ...meta, rejectedCount: meta.excludedCount } };
+}
+
 /** Public snapshot lookup; a missing record is an honest coverage gap, not an empty company. */
 export async function loadEnrichment(bno, options = {}) {
   const businessNumber = normalizeBusinessNumber(bno);
   if (!isValidBusinessNumber(businessNumber)) throw new Error('올바른 사업자등록번호가 필요합니다.');
-  const { records, meta } = await loadEnrichmentCatalog(options);
-  const record = records.find(item => item.businessNumber === businessNumber) || null;
+  const { records, meta } = await loadEnrichmentIndex(options);
+  const record = records.find(value => value.businessNumber === businessNumber) || null;
   return { record, summary: record ? summarizeEnrichment(record) : null, meta };
 }

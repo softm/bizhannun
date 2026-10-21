@@ -246,7 +246,7 @@ export function toCsv(rows, columns) {
   return `\uFEFF${lines.join('\r\n')}\r\n`;
 }
 
-export function exportPartnersCsv(partners) {
+export function exportPartnersCsv(partners, { includeLinkedInfo = false } = {}) {
   return toCsv(partners, [
     { key: 'businessNumber', label: '사업자등록번호', value: (row) => formatBusinessNumber(row.businessNumber) },
     { key: 'name', label: '업체명' },
@@ -256,6 +256,12 @@ export function exportPartnersCsv(partners) {
     { key: 'outcome', label: '조회결과', value: (row) => row.lastCheck?.outcome ?? '' },
     { key: 'status', label: '사업상태', value: (row) => row.lastSuccess?.statusLabel ?? '' },
     { key: 'taxType', label: '과세유형', value: (row) => row.lastSuccess?.taxType ?? '' },
+    ...(includeLinkedInfo ? [
+      { key: 'displayName', label: '표시상호' },
+      { key: 'publicName', label: '공개상호' },
+      { key: 'publicNameSourceUrl', label: '공개상호 출처' },
+      { key: 'publicNameCollectedAt', label: '공개상호 수집시각' },
+    ] : []),
   ]);
 }
 

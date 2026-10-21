@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp,writeFile,readFile,rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { extractBusinessPage,robotsAllows,runCollector,validatePublicUrl } from '../scripts/collect-business-web.mjs';
+import { gzipSync, deflateSync, brotliCompressSync } from 'node:zlib';
+import { extractBusinessPage,robotsAllows,runCollector,validatePublicUrl,decodePublicBody } from '../scripts/collect-business-web.mjs';
 
 const BNO='2208162517',OTHER='1048137225';
 const ORIGIN='https://company.testcorp.com';
@@ -213,4 +214,83 @@ test('publisher JSON-LD and footer contacts cannot be assigned to a mentioned BR
  const page=extractBusinessPage('<title>기업 소개 기사</title><meta property="og:site_name" content="언론사"><meta name="description" content="언론사 설명"><script type="application/ld+json">{"@type":"Organization","name":"언론사","telephone":"02-111-1111","email":"publisher@example.com"}</script><p>대상 사업자번호: 220-81-62517</p><footer>TEL: 02-111-1111 이메일: publisher@example.com</footer>',ORIGIN,seed,now());
  assert.equal(page.source.match,'exact_bno');
  assert.equal(page.fields.some(field=>['name','phone','email','description'].includes(field.field)),false);
+});
+
+test('a target number on the page never attributes another business table or recommendation to the target',()=>{
+ const target='<table><tr><th>사업자등록번호</th><td>220-81-62517</td></tr><tr><th>상호</th><td>대상기업</td></tr></table>';
+ const other='<section><h2>추천업체</h2><table><tr><th>사업자등록번호</th><td>104-81-37225</td></tr><tr><th>상호</th><td>다른기업</td></tr><tr><th>주소</th><td>다른 기업의 주소</td></tr></table></section>';
+ const page=extractBusinessPage('<h1>대상기업</h1>'+target+other,ORIGIN,{...seed,channel:'directory'},now());
+ assert.equal(page.source.match,'exact_bno');
+ assert.deepEqual(page.fields.map(field=>[field.field,field.value]),[['name','대상기업']]);
+ const unnumbered=other.replace('<tr><th>사업자등록번호</th><td>104-81-37225</td></tr>','');
+ const ambiguous=extractBusinessPage(target+unnumbered,ORIGIN,{...seed,channel:'directory'},now());
+ assert.deepEqual(ambiguous.fields.map(field=>field.value),['대상기업']);
+});
+
+test('multi-business table rows join on their own business-number column',()=>{
+ const table='<table><tr><th>상호</th><th>사업자등록번호</th><th>주소</th></tr><tr><td>다른기업</td><td>104-81-37225</td><td>다른 주소</td></tr><tr><td>대상기업</td><td>220-81-62517</td><td>대상 주소</td></tr></table>';
+ const page=extractBusinessPage(table,ORIGIN,{...seed,channel:'directory'},now());
+ assert.deepEqual(page.fields.map(field=>[field.field,field.value]),[['name','대상기업'],['address','대상 주소']]);
+});
+
+test('an official domain cannot merge multiple unnumbered JSON-LD organizations',()=>{
+ const graph=organizations=>`<meta property="og:site_name" content="자동 귀속 금지"><script type="application/ld+json">${JSON.stringify({'@graph':organizations})}</script>`;
+ const companies=[{'@type':'Organization',name:'본회사'},{'@type':'Organization',name:'별도 자회사',telephone:'02-999-9999'}];
+ const ambiguous=extractBusinessPage(graph(companies),ORIGIN,{...seed,verifiedDomain:true},now());
+ assert.equal(ambiguous.source.match,'confirmed_domain');
+ assert.equal(ambiguous.fields.length,0);
+ companies[0].taxID='220-81-62517';
+ const exact=extractBusinessPage(graph(companies),ORIGIN,{...seed,verifiedDomain:true},now());
+ assert.deepEqual(exact.fields.map(field=>[field.field,field.value]),[['name','본회사']]);
+ const other=extractBusinessPage(graph([{'@type':'Organization',name:'다른기업',taxID:'104-81-37225'}]),ORIGIN,{...seed,verifiedDomain:true},now());
+ assert.equal(other.source.match,'candidate');assert.equal(other.source.identityMismatch,true);
+ assert.equal(other.fields.length,0);
+});
+
+test('declared Korean Windows-949 aliases and HTML metadata decode without guessing invalid UTF-8',()=>{
+ const korean=Buffer.from([0xb0,0xa1]);
+ for(const charset of ['euc-kr','windows-949','cp949','ms949','x-windows-949','ks_c_5601-1987']) {
+  assert.equal(decodePublicBody(korean,{contentType:`text/html; charset=${charset}`}), '가');
+ }
+ const html=Buffer.concat([Buffer.from('<meta charset="cp949"><h1>'),korean,Buffer.from('</h1>')]);
+ assert.match(decodePublicBody(html),/가/);
+ // Runtimes with full UHC support may decode it; narrower ICU builds must reject corruption.
+ try { assert.equal(decodePublicBody(Buffer.from([0x81,0x41]),{contentType:'text/html; charset=cp949'}),'갂'); }
+ catch(error) { assert.match(error.message,/unsupported_encoding/); }
+ assert.throws(()=>decodePublicBody(korean,{contentType:'text/html; charset=utf-8'}),/unsupported_encoding/);
+ assert.throws(()=>decodePublicBody(korean,{contentType:'text/html; charset=unknown-codepage'}),/unsupported_encoding/);
+});
+
+test('native compressed response decoding is explicit and bounded before parsing business facts',()=>{
+ const body=Buffer.from('<title>사업자 공개 정보</title>');
+ for(const [contentEncoding,compress] of [['gzip',gzipSync],['deflate',deflateSync],['br',brotliCompressSync]]) {
+  assert.equal(decodePublicBody(compress(body),{contentType:'text/html; charset=utf-8',contentEncoding}),body.toString());
+ }
+ assert.throws(()=>decodePublicBody(gzipSync(Buffer.alloc(1_000_001,65)),{contentEncoding:'gzip'}),/response_too_large/);
+ assert.throws(()=>decodePublicBody(body,{contentEncoding:'gzip'}),/invalid_compressed_response/);
+ assert.throws(()=>decodePublicBody(body,{contentEncoding:'__proto__'}),/unsupported_content_encoding/);
+});
+
+test('a partially extracted same-level source preserves all previous fields and timestamps',async t=>{
+ const paths=await baseline(t);const previous=paths.previous.businesses[0];
+ await runCollector({...paths,lookupImpl,now,delayMs:0,fetchImpl:async url=>url.pathname==='/robots.txt'?response(''):response('<script type="application/ld+json">{"@type":"Organization","taxID":"220-81-62517","name":"이름만 읽힌 응답"}</script>')});
+ const business=JSON.parse(await readFile(paths.outputPath,'utf8')).businesses[0];
+ assert.deepEqual(business.fields,previous.fields);assert.deepEqual(business.sources,previous.sources);
+ assert.equal(business.collection.lastSuccessAt,previous.collection.lastSuccessAt);
+ assert.equal(business.collection.error,'partial_extraction');
+});
+
+test('a successful refreshed URL retains its existing source ID and known entity classification',async t=>{
+ const paths=await baseline(t);const old=paths.previous.businesses[0];
+ const oldId=old.sources[0].id;old.sources[0].id='reviewed-source';old.entityType='corporation';
+ old.fields.forEach(field=>{if(field.sourceId===oldId)field.sourceId='reviewed-source';});
+ old.collection.sourceStatuses=[{provider:'ftc',status:'not_configured'}];
+ await writeFile(paths.outputPath,JSON.stringify(paths.previous));
+ await runCollector({...paths,lookupImpl,now,delayMs:0,fetchImpl:async url=>url.pathname==='/robots.txt'?response(''):response(html.replaceAll('테스트기업','갱신된기업'))});
+ const business=JSON.parse(await readFile(paths.outputPath,'utf8')).businesses[0];
+ assert.equal(business.entityType,'corporation');
+ assert.equal(business.sources.filter(source=>source.url===ORIGIN+'/').length,1);
+ assert.ok(business.sources.some(source=>source.id==='reviewed-source'));
+ assert.ok(business.fields.some(field=>field.sourceId==='reviewed-source'&&field.value==='갱신된기업'));
+ assert.deepEqual(business.collection.sourceStatuses,old.collection.sourceStatuses);
 });

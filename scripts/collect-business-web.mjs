@@ -7,6 +7,7 @@ import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { Readable } from 'node:stream';
 import { createHash } from 'node:crypto';
+import { gunzipSync, inflateSync, brotliDecompressSync } from 'node:zlib';
 import { isValidBusinessNumber } from '../src/domain.mjs';
 
 const USER_AGENT = 'BizHannunBot/0.3 (+https://softm.github.io/bizhannun/)';
@@ -29,8 +30,43 @@ function attribute(tag, name) {
   const match = tag.match(new RegExp('(?:^|\\s)' + name + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))','i'));
   return match ? decodeEntities(match[1] ?? match[2] ?? match[3]) : '';
 }
+function visibleMarkup(html) {
+  return html.replace(/<!--[\s\S]*?-->/g,' ').replace(/<(script|style|noscript|template|svg)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,' ').replace(/<([a-z][\w-]*)\b[^>]*(?:\shidden(?=\s|=|>)|aria-hidden\s*=\s*[\"']true[\"']|style\s*=\s*[\"'][^\"']*display\s*:\s*none)[^>]*>[\s\S]*?<\/\1\s*>/gi,' ');
+}
 function visibleText(html) {
-  return decodeEntities(html.replace(/<!--[\s\S]*?-->/g,' ').replace(/<(script|style|noscript|template|svg)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,' ').replace(/<([a-z][\w-]*)\b[^>]*(?:\shidden(?=\s|=|>)|aria-hidden\s*=\s*[\"']true[\"']|style\s*=\s*[\"'][^\"']*display\s*:\s*none)[^>]*>[\s\S]*?<\/\1\s*>/gi,' ').replace(/<[^>]*>/g,' ')).replace(/\s+/g,' ').trim();
+  return decodeEntities(visibleMarkup(html).replace(/<[^>]*>/g,' ')).replace(/\s+/g,' ').trim();
+}
+
+/** Decode only declared encodings; bad bytes never become replacement-character business facts. */
+export function decodePublicBody(input, { contentType = '', contentEncoding = '' } = {}) {
+  let raw = Buffer.from(input);
+  if (raw.length > MAX_BYTES) throw new Error('response_too_large');
+  const encodings = contentEncoding.toLowerCase().split(',').map(value => value.trim()).filter(value => value && value !== 'identity');
+  if (encodings.length > 3) throw new Error('unsupported_content_encoding');
+  for (const encoding of encodings.reverse()) {
+    const decompress = new Map([['gzip', gunzipSync], ['x-gzip', gunzipSync], ['deflate', inflateSync], ['br', brotliDecompressSync]]).get(encoding);
+    if (!decompress) throw new Error('unsupported_content_encoding');
+    try { raw = decompress(raw, { maxOutputLength: MAX_BYTES }); }
+    catch (error) { throw new Error(error.code === 'ERR_BUFFER_TOO_LARGE' ? 'response_too_large' : 'invalid_compressed_response'); }
+  }
+  const declaration = /charset\s*=\s*["']?([\w.-]+)/i;
+  const head = raw.subarray(0, 4096).toString('latin1');
+  const headerLabel = contentType.match(declaration)?.[1];
+  const metaLabel = [...head.matchAll(/<meta\b[^>]*>/gi)].map(value => value[0].match(declaration)?.[1]).find(Boolean);
+  const xmlLabel = head.match(/^\s*<\?xml[^>]*encoding\s*=\s*["']([\w.-]+)["']/i)?.[1];
+  const bomLabel = raw[0] === 0xef && raw[1] === 0xbb && raw[2] === 0xbf ? 'utf-8'
+    : raw[0] === 0xff && raw[1] === 0xfe ? 'utf-16le' : raw[0] === 0xfe && raw[1] === 0xff ? 'utf-16be' : '';
+  const declared = (bomLabel || headerLabel || metaLabel || xmlLabel || 'utf-8').toLowerCase();
+  const koreanAliases = new Set(['euc-kr', 'euc_kr', 'euckr', 'ks_c_5601-1987', 'ks_c_5601-1989', 'ks_c_5601', 'ksc5601', 'ksc_5601', 'korean', 'csksc56011987', 'windows-949', 'cp949', 'ms949', 'x-windows-949']);
+  const encoding = koreanAliases.has(declared) ? 'euc-kr' : declared;
+  try {
+    const decoded = new TextDecoder(encoding, { fatal: true }).decode(raw);
+    // Some ICU builds accept UHC extension bytes as C1 controls instead of decoding CP949.
+    // Keep the previous snapshot when the runtime cannot correctly decode those bytes.
+    if (encoding === 'euc-kr' && /[\u0080-\u009f\ufffd]/.test(decoded)) throw new Error('invalid_korean_text');
+    return decoded;
+  }
+  catch { throw new Error('unsupported_encoding'); }
 }
 function publicIp(address) {
   if (isIP(address) === 4) {
@@ -99,11 +135,9 @@ async function fetchPublic(input, context, beforeRedirect) {
         } finally {reader.releaseLock();}
       }
       const contentType = response.headers.get('content-type') || '';
-      const raw = Buffer.concat(chunks);
-      const declared = (contentType + ' ' + raw.subarray(0,2000).toString('latin1')).match(/charset\s*=\s*["']?([\w-]+)/i)?.[1]?.toLowerCase();
-      const encoding = ['euc-kr','ks_c_5601-1987','ks_c_5601'].includes(declared) ? 'euc-kr' : 'utf-8';
-      let body;
-      try { body = new TextDecoder(encoding,{fatal:true}).decode(raw); } catch { throw new Error('unsupported_encoding'); }
+      // Native HTTP exposes encoded bytes. A supplied Fetch implementation already handles transport decoding.
+      const body = decodePublicBody(Buffer.concat(chunks), { contentType,
+        contentEncoding: context.fetchImpl ? '' : response.headers.get('content-encoding') || '' });
       return {url:url.href,status:response.status,contentType,body};
     } finally {clearTimeout(timer);}
   }
@@ -170,24 +204,65 @@ function metadata(html,property) {
   for(const match of html.matchAll(/<meta\b[^>]*>/gi))if([attribute(match[0],'name'),attribute(match[0],'property')].some(x=>x.toLowerCase()===property))return clean(attribute(match[0],'content'));
   return '';
 }
-function findBno(text,bno) {
-  return [...text.matchAll(/(?:^|[^\d])(\d{3}[\s-]*\d{2}[\s-]*\d{5})(?!\d)/g)].some(m=>normalizedNumber(m[1])===bno);
+function businessNumbers(text) {
+  return new Set([...String(text).matchAll(/(?:^|[^\d])(\d{3}[\s-]*\d{2}[\s-]*\d{5})(?!\d)/g)]
+    .map(match => normalizedNumber(match[1])).filter(isValidBusinessNumber));
+}
+function organizationIdentifiers(org) {
+  const identifiers = Array.isArray(org.identifier) ? org.identifier.slice(0, 30) : [org.identifier];
+  return [org.taxID, org.vatID, ...identifiers.map(value => object(value) ? value.value : value)]
+    .filter(value => typeof value === 'string').join(' ');
+}
+function leafTables(html) {
+  const stack = [], tables = [];
+  for (const tag of html.matchAll(/<\/?table\b[^>]*>/gi)) {
+    if (!/^<\//.test(tag[0])) {
+      if (stack.length) stack[stack.length - 1].nested = true;
+      stack.push({ start: tag.index, nested: false });
+    } else {
+      const open = stack.pop();
+      if (open && !open.nested) tables.push(html.slice(open.start, tag.index + tag[0].length));
+    }
+  }
+  return tables;
+}
+function tableRows(html) {
+  return [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)].map(row => {
+    const cells = [...row[1].matchAll(/<(th|td)\b[^>]*>([\s\S]*?)<\/\1\s*>/gi)];
+    return { cells: cells.map(cell => clean(visibleText(cell[2]))), header: cells.length > 0 && cells.every(cell => cell[1].toLowerCase() === 'th') };
+  });
+}
+function tableField(label) {
+  const key = label.replace(/[\s:：]/g, '');
+  if (/^(?:사업자등록번호|사업자번호|businessregistrationnumber|brn)$/i.test(key)) return 'businessNumber';
+  if (/^(?:회사명|상호명|상호|법인명|사업장명)$/.test(key)) return 'name';
+  if (/^(?:회사주소|사업장소재지|사업장주소|주소|소재지)$/.test(key)) return 'address';
+  if (/^(?:회사전화번호|전화번호|대표전화|고객센터)$/.test(key)) return 'phone';
+  if (/^(?:대표이메일|회사이메일|이메일|E-?mail)$/i.test(key)) return 'email';
+  return new Map([['업태', 'businessType'], ['업종', 'industry'], ['종목', 'businessCategory']]).get(key) || '';
 }
 
 export function extractBusinessPage(html, pageUrl, seed, collectedAt = new Date().toISOString()) {
   const text=visibleText(html);const orgs=organizations(html);const number=normalizedNumber(seed.businessNumber);
-  const identityText=text+' '+orgs.map(o=>[o.taxID,o.vatID,o.identifier?.value,typeof o.identifier==='string'?o.identifier:''].filter(Boolean).join(' ')).join(' ');
+  const identityText=text+' '+orgs.map(organizationIdentifiers).join(' ');
+  const pageNumbers=businessNumbers(identityText);
+  const targetPresent=pageNumbers.has(number),otherNumberPresent=[...pageNumbers].some(value=>value!==number);
   const officialHost=seed.channel!=='directory'?(seed.verifiedDomain===true?new URL(seed.website).hostname:seed.officialDomain):null;
   const domainConfirmed=Boolean(officialHost&&officialHost===new URL(pageUrl).hostname);
-  const match=findBno(identityText,number)?'exact_bno':domainConfirmed?'confirmed_domain':'candidate';
+  const match=targetPresent?'exact_bno':domainConfirmed&&!otherNumberPresent?'confirmed_domain':'candidate';
   const id=sourceId(pageUrl);
   const title=clean(html.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i)?.[1]||metadata(html,'og:title')||new URL(pageUrl).hostname,200);
-  const source={id,url:pageUrl,title,channel:seed.channel==='directory'?'directory':'website',collectedAt,publishedAt:null,match,...(match==='exact_bno'?{businessNumber:number}:{}),excerpt:clean(text.slice(Math.max(0,text.search(/사업자\s*등록\s*번호|사업자번호|business registration/i)-80)),500)};
+  const source={id,url:pageUrl,title,channel:seed.channel==='directory'?'directory':'website',collectedAt,publishedAt:null,match,...(match==='exact_bno'?{businessNumber:number}:{}),...(!targetPresent&&otherNumberPresent?{identityMismatch:true,...(pageNumbers.size===1?{matchedBusinessNumber:[...pageNumbers][0]}:{})}:{}),excerpt:clean(text.slice(Math.max(0,text.search(/사업자\s*등록\s*번호|사업자번호|business registration/i)-80)),500)};
   const fields=[];const add=(field,value,scope)=>{const v=clean(value,field==='description'?1500:500);if(v&&!fields.some(f=>f.field===field&&f.value===v))fields.push({field,value:v,sourceId:id,match,...(scope?{scope}:{})});};
+  const tables=leafTables(visibleMarkup(html)).map(value=>({html:value,rows:tableRows(value),numbers:businessNumbers(visibleText(value))})).filter(table=>table.rows.some(row=>row.cells.some(cell=>tableField(cell))));
+  const pageWideFieldsAllowed=!otherNumberPresent&&orgs.length<=1&&tables.length<=1;
   // A publisher's Organization is not the target business just because its page mentions the BRN.
   const eligibleOrgs=orgs.filter(org=>{
-    const identifiers=[org.taxID,org.vatID,org.identifier?.value,typeof org.identifier==='string'?org.identifier:''].filter(Boolean).join(' ');
-    return findBno(identifiers,number)||(domainConfirmed&&!org.taxID&&!org.vatID&&!/\d{3}[\s-]*\d{2}[\s-]*\d{5}/.test(identifiers));
+    const identifiers=organizationIdentifiers(org),numbers=businessNumbers(identifiers);
+    if(numbers.has(number))return numbers.size===1;
+    if(orgs.length!==1||!domainConfirmed||org.taxID||org.vatID||numbers.size||otherNumberPresent)return false;
+    const canonical=typeof org.url==='string'?org.url:typeof org['@id']==='string'?org['@id']:'';
+    try { return !canonical||new URL(canonical,pageUrl).hostname===new URL(pageUrl).hostname; } catch { return false; }
   });
   for(const org of seed.channel==='directory'?[]:eligibleOrgs) {
     add('name',org.legalName||org.name);add('description',org.description);add('industry',org.industry);add('foundedAt',org.foundingDate);
@@ -196,27 +271,38 @@ export function extractBusinessPage(html, pageUrl, seed, collectedAt = new Date(
     if(typeof org.telephone==='string')add('phone',org.telephone,'public_business');
     if(typeof org.email==='string'&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(org.email))add('email',org.email,'public_business');
   }
-  if(domainConfirmed){add('name',metadata(html,'og:site_name'));add('description',metadata(html,'description')||metadata(html,'og:description'));}
-  const classifications={};
-  for(const row of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)) {
-    const cells=[...row[1].matchAll(/<(?:th|td)\b[^>]*>([\s\S]*?)<\/(?:th|td)\s*>/gi)].map(cell=>clean(visibleText(cell[1])));
-    for(let i=0;i+1<cells.length;i+=2) {
-      const label=cells[i].replace(/[\s:：]/g,'');const value=cells[i+1];
-      if(/^(?:회사명|상호명|상호|법인명|사업장명)$/.test(label))add('name',value);
-      if(/^(?:회사주소|사업장소재지|사업장주소|주소|소재지)$/.test(label))add('address',value);
-      if(/^(?:회사전화번호|전화번호|대표전화|고객센터)$/.test(label))add('phone',value,'public_business');
-      if(/^(?:대표이메일|회사이메일|이메일|E-?mail)$/i.test(label)&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))add('email',value,'public_business');
-      if(/^(?:업태|업종|종목)$/.test(label))classifications[label]=value;
+  if(domainConfirmed&&pageWideFieldsAllowed){add('name',metadata(html,'og:site_name'));add('description',metadata(html,'description')||metadata(html,'og:description'));}
+  const addCell=(label,value)=>{
+    const field=tableField(label);
+    if(!field||field==='businessNumber'||(field==='email'&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)))return;
+    add(field,value,['phone','email'].includes(field)?'public_business':undefined);
+  };
+  for(const table of tables) {
+    const header=table.rows.find(row=>row.header&&row.cells.some(cell=>tableField(cell)==='businessNumber'));
+    if(header) {
+      const numberColumn=header.cells.findIndex(cell=>tableField(cell)==='businessNumber');
+      for(const row of table.rows.filter(value=>!value.header)) {
+        if(normalizedNumber(row.cells[numberColumn])!==number)continue;
+        for(let i=0;i<Math.min(header.cells.length,row.cells.length);i++)addCell(header.cells[i],row.cells[i]);
+      }
+      continue;
+    }
+    const tableMatches=table.numbers.has(number)&&table.numbers.size===1;
+    const unambiguousPage=table.numbers.size===0&&tables.length===1&&pageWideFieldsAllowed&&match!=='candidate';
+    for(const row of table.rows) {
+      const rowNumbers=businessNumbers(row.cells.join(' '));
+      // Repeated business cards in one table require their own row-level identifier.
+      if(!tableMatches&&!unambiguousPage&&!(rowNumbers.has(number)&&rowNumbers.size===1))continue;
+      for(let i=0;i+1<row.cells.length;i+=2)addCell(row.cells[i],row.cells[i+1]);
     }
   }
-  add('businessType',classifications['업태']);add('businessCategory',classifications['종목']);add('industry',classifications['업종']);
   const phone=text.match(/(?:대표\s*전화|고객\s*센터|전화\s*번호|고객\s*상담|\bTEL(?:EPHONE)?\b)\s*[:：]?\s*(\+?\d[\d()\s-]{6,22}\d)/i)?.[1];
-  if(phone&&domainConfirmed)add('phone',phone,'public_business');
+  if(phone&&domainConfirmed&&pageWideFieldsAllowed)add('phone',phone,'public_business');
   const email=text.match(/(?:고객\s*문의\s*(?:이메일|E-?mail)|대표\s*(?:이메일|E-?mail)|이메일|E-?mail)\s*[:：]?\s*([A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i)?.[1];
-  if(email&&domainConfirmed)add('email',email,'public_business');
+  if(email&&domainConfirmed&&pageWideFieldsAllowed)add('email',email,'public_business');
   const address=text.match(/(?:본사\s*주소|사업장\s*(?:소재지|주소)|주소|소재지)\s*[:：]\s*([^|©]{8,180})/)?.[1];
-  if(address&&domainConfirmed)add('address',address.split(/대표(?:자|이사)|사업자\s*등록|전화|팩스|TEL|Copyright/i)[0]);
-  if(seed.channel==='directory'&&match==='exact_bno'&&!fields.some(field=>field.field==='name')) {
+  if(address&&domainConfirmed&&pageWideFieldsAllowed)add('address',address.split(/대표(?:자|이사)|사업자\s*등록|전화|팩스|TEL|Copyright/i)[0]);
+  if(seed.channel==='directory'&&match==='exact_bno'&&pageWideFieldsAllowed&&!fields.some(field=>field.field==='name')) {
     const heading=html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1\s*>/i)?.[1];
     const candidate=clean(heading?visibleText(heading):metadata(html,'og:title'),200)
       .replace(/\s*[-|·]\s*(?:사업자(?:등록번호)?\s*(?:조회|정보)|기업정보|회사정보).*$/,'').trim();
@@ -272,7 +358,7 @@ export async function runCollector({configPath='config/business-sources.json',ou
   const records=new Map(previous.businesses.map(record=>[record.businessNumber,record]));
   const context={fetchImpl,lookupImpl,robots:new Map()};const errors=[];
   for(const seed of seeds) {
-    const attempt=now();const old=records.get(seed.businessNumber);const sources=[];const fields=[];let failure='';let officialDomain=seed.verifiedDomain&&seed.channel==='website'?new URL(seed.website).hostname:old?.officialDomain||null;
+    const attempt=now();const old=records.get(seed.businessNumber);const sources=[];const fields=[];let failure='';let officialDomain=seed.channel==='directory'?null:seed.verifiedDomain?new URL(seed.website).hostname:old?.officialDomain||null;
     const queue=[seed.website],seen=new Set();
     while(queue.length&&seen.size<MAX_PAGES) {
       const url=queue.shift();if(seen.has(url))continue;seen.add(url);
@@ -286,11 +372,18 @@ export async function runCollector({configPath='config/business-sources.json',ou
         const previousSource=(old?.sources||[]).find(source=>source.id===page.source.id||source.url===page.source.url);
         const rank=match=>({candidate:0,confirmed_domain:1,exact_bno:2}[match]||0);
         const previousFields=(old?.fields||[]).filter(field=>field.sourceId===previousSource?.id);
-        if(previousSource&&rank(previousSource.match)>0&&(rank(page.source.match)<rank(previousSource.match)||(!page.fields.length&&previousFields.length))) {
-          failure=rank(page.source.match)<rank(previousSource.match)?'identity_not_confirmed':'no_public_fields';
+        const nextKinds=new Set(page.fields.filter(field=>field.match!=='candidate').map(field=>field.field));
+        const incomplete=previousFields.some(field=>field.match!=='candidate'&&field.field!=='website'&&!nextKinds.has(field.field));
+        if(previousSource&&rank(previousSource.match)>0&&(rank(page.source.match)<rank(previousSource.match)||incomplete)) {
+          failure=rank(page.source.match)<rank(previousSource.match)?'identity_not_confirmed':nextKinds.size?'partial_extraction':'no_public_fields';
           // Retain the original snapshot and fields, with their original collection time.
-          // New candidate values never inherit the former source's confirmed identity.
+          // Missing fields on a partial response are not evidence that earlier facts disappeared.
           continue;
+        }
+        if(previousSource?.id&&previousSource.id!==page.source.id) {
+          const originalId=page.source.id;
+          page.source.id=previousSource.id;
+          for(const field of page.fields)if(field.sourceId===originalId)field.sourceId=previousSource.id;
         }
         sources.push(page.source,...page.references);fields.push(...page.fields);
         queue.push(...page.links.filter(link=>!seen.has(link)));
@@ -305,6 +398,7 @@ export async function runCollector({configPath='config/business-sources.json',ou
       records.set(seed.businessNumber,{...(old||{businessNumber:seed.businessNumber,name:seed.name,sources:[],fields:[],collectedAt:null}),collection:{...(old?.collection||{}),status:'failed',lastAttemptAt:attempt,error:failure||'no_pages'}});
       continue;
     }
+    if(pageSources.every(source=>source.match==='candidate'))failure=failure||'identity_not_confirmed';
     const uniqueSources=[...new Map([...sources.filter(source=>source.discoveredFrom),...sources.filter(source=>!source.discoveredFrom)].map(source=>[source.id,source])).values()];
     const oldSourceById=new Map((old?.sources||[]).map(source=>[source.id,source]));
     const rank=match=>({candidate:0,confirmed_domain:1,exact_bno:2}[match]||0);
@@ -318,7 +412,12 @@ export async function runCollector({configPath='config/business-sources.json',ou
       const websiteSource=pageSources.find(source=>source.channel==='website'&&new URL(source.url).hostname===officialDomain&&source.match!=='candidate');
       if(websiteSource)mergedFields.push({field:'website',value:new URL(websiteSource.url).origin,sourceId:websiteSource.id,match:websiteSource.match});
     }
-    records.set(seed.businessNumber,{businessNumber:seed.businessNumber,name:seed.name,collectedAt:attempt,...(officialDomain?{officialDomain,website:'https://'+officialDomain}:{}),sources:mergedSources,fields:mergedFields,collection:{status:failure?'partial':'success',lastAttemptAt:attempt,lastSuccessAt:attempt,...(failure?{error:failure}:{})}});
+    const collection={...(old?.collection||{}),status:failure?'partial':'success',lastAttemptAt:attempt,
+      lastSuccessAt:pageSources.some(source=>source.match!=='candidate')?attempt:old?.collection?.lastSuccessAt||null};
+    delete collection.error;if(failure)collection.error=failure;
+    records.set(seed.businessNumber,{businessNumber:seed.businessNumber,name:seed.name,collectedAt:attempt,
+      ...(['business','corporation'].includes(old?.entityType)?{entityType:old.entityType}:{}),
+      ...(officialDomain?{officialDomain,website:'https://'+officialDomain}:{}),sources:mergedSources,fields:mergedFields,collection});
   }
   const result={businesses:[...records.values()],meta:{...(previous.meta||{}),generatedAt:now(),attemptedCount:seeds.length,businessCount:records.size,failedCount:errors.length,errors,policy:'Public business information only; exact BRN/domain evidence and source URLs retained. Discovery candidates are not verified facts.'}};
   await mkdir(dirname(outputPath),{recursive:true});const temporary=outputPath+'.tmp';await writeFile(temporary,JSON.stringify(result,null,2)+'\n');await rename(temporary,outputPath);

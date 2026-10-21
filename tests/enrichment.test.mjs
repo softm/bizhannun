@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ENRICHMENT_FIELDS, safeEnrichmentUrl, normalizeEnrichment, summarizeEnrichment, loadEnrichmentCatalog, loadEnrichment } from '../src/enrichment.mjs';
+import { ENRICHMENT_FIELDS, safeEnrichmentUrl, normalizeEnrichment, summarizeEnrichment, loadEnrichment, loadEnrichmentIndex, loadEnrichmentCatalog } from '../src/enrichment.mjs';
 const BNO = '2208162517';
 const stamp = '2026-10-21T13:00:00Z';
 const record = () => ({
@@ -124,6 +124,57 @@ test('bad input, duplicate BRNs, invalid JSON and oversized payloads do not sile
   await assert.rejects(loadEnrichment(BNO, { fetcher: async () => new Response(' '.repeat(8_000_001)) }));
 });
 
+test('candidate discovery retains only a safe referring public URL',()=>{
+ const input=record();input.sources[2].discoveredFrom='https://company.example.com/about';
+ assert.equal(normalizeEnrichment(input).sources[2].discoveredFrom,input.sources[2].discoveredFrom);
+ input.sources[2].discoveredFrom='https://company.example.com/?token=secret';
+ assert.equal(normalizeEnrichment(input).sources[2].discoveredFrom,undefined);
+});
+
+test('a shared index rejects duplicate identities anywhere instead of joining by first match', async () => {
+  const other = record();
+  other.businessNumber = '6901100416';
+  const duplicate = { ...record(), businessNumber: '220-81-62517' };
+  const fetcher = async () => json({ businesses: [other, record(), duplicate] });
+  await assert.rejects(loadEnrichmentIndex({ fetcher }), /중복/);
+  await assert.rejects(loadEnrichment('6901100416', { fetcher }), /중복/);
+});
+
+test('shared index accounts for malformed identities and does not truncate excess records', async () => {
+  const index = await loadEnrichmentIndex({ fetcher: async () => json({ businesses: [record(), null, { businessNumber: 'invalid' }] }) });
+  assert.equal(index.records.length, 1);
+  assert.equal(index.records[0].businessNumber, BNO);
+  assert.equal(index.meta.loadedCount, 1);
+  assert.equal(index.meta.rejectedCount, 2);
+  await assert.rejects(loadEnrichmentIndex({ fetcher: async () => json({ businesses: Array(5001).fill(null) }) }), /건수/);
+  const missing = await loadEnrichmentIndex({ fetcher: async () => new Response('', { status: 404 }) });
+  assert.deepEqual(missing.records, []);
+  assert.equal(missing.meta.status, 'not_collected');
+});
+
+test('contradictory identity aliases cannot silently establish an exact match', () => {
+  const input = record();
+  input.bno = '6901100416';
+  assert.equal(normalizeEnrichment(input), null);
+  delete input.bno;
+  input.sources[0].matchedBusinessNumber = '6901100416';
+  const result = summarizeEnrichment(input);
+  assert.equal(result.sources.find(value => value.id === 'registry').match, 'candidate');
+  assert.equal(result.profile.name, undefined);
+});
+
+test('a confirmed domain never overrides an explicitly different source business number', () => {
+  const input = record();
+  input.sources = [{ id: 'site', url: 'https://company.example.com', match: 'confirmed_domain', businessNumber: '1048137225' }];
+  input.fields = [{ field: 'name', value: '다른 기업', sourceId: 'site' }];
+  const normalized = normalizeEnrichment(input);
+  assert.equal(normalized.sources[0].match, 'candidate');
+  assert.equal(normalized.sources[0].identityMismatch, true);
+  assert.equal(normalized.sources[0].businessNumber, '1048137225');
+  assert.deepEqual(normalizeEnrichment(normalized), normalized);
+  assert.equal(summarizeEnrichment(normalized).profile.name, undefined);
+});
+
 test('catalog loading normalizes records, counts exclusions and whitelists metadata', async () => {
   const first = record();
   first.businessNumber = '220-81-62517';
@@ -183,11 +234,4 @@ test('catalog preserves HTTP cancellation and enforces streaming byte limits', a
     headers: { 'content-length': '8000001' },
   }) }), /허용 크기/);
   await assert.rejects(loadEnrichmentCatalog({ fetcher: async () => new Response(' '.repeat(8_000_001)) }), /허용 크기/);
-});
-
-test('candidate discovery retains only a safe referring public URL',()=>{
- const input=record();input.sources[2].discoveredFrom='https://company.example.com/about';
- assert.equal(normalizeEnrichment(input).sources[2].discoveredFrom,input.sources[2].discoveredFrom);
- input.sources[2].discoveredFrom='https://company.example.com/?token=secret';
- assert.equal(normalizeEnrichment(input).sources[2].discoveredFrom,undefined);
 });

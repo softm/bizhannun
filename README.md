@@ -7,6 +7,7 @@
 - 실행: [사업자한눈](https://softm.github.io/bizhannun/) · [로그인·계정 보관](https://softm.github.io/bizhannun/#account)
 - 데이터 현황: [data-status.html](https://softm.github.io/bizhannun/data-status.html)
 - 상호·업체명 검색 사용법·범위·검증: [docs/NAME_SEARCH.md](docs/NAME_SEARCH.md)
+- 거래처 정보 연결·사업자 인사이트 기획: [docs/BUSINESS_INSIGHTS.md](docs/BUSINESS_INSIGHTS.md)
 - 사업자 통합정보 수집·출처·확장: [docs/BUSINESS_ENRICHMENT.md](docs/BUSINESS_ENRICHMENT.md)
 - 저장소: [softm/bizhannun](https://github.com/softm/bizhannun)
 - 운영·배포·장애 대응: [docs/OPERATIONS.md](docs/OPERATIONS.md)
@@ -20,6 +21,7 @@
 | 기능 | 제공하는 내용 | 연결 조건과 한계 |
 | --- | --- | --- |
 | 상호·업체명 검색 | 이름·번호 자동 구분, 부분 이름·공백·법인표기 완화, 후보의 번호·주소·출처 확인 후 선택 | 공개 수집자료와 내 거래처·프로필 범위이며 실제 검색 대상 수를 표시합니다. 전국 사업자 전체 검색은 아닙니다. [사용법과 검증](docs/NAME_SEARCH.md) |
+| 거래처 정보 연결·인사이트 | 사업자번호로 조회·목록·상세·검색·내보내기 연결, 상태 재확인·자료 차이·누락 항목·다음 행동 안내 | 사용자 별칭을 보존하고 공개 상호의 출처를 표시합니다. 기본정보 확인 범위와 자료 시점을 제공하며 신용점수·거래 안전등급으로 해석하지 않습니다. |
 | 사업자 상태 조회 | 계속·휴업·폐업 등 국세청 응답, 과세유형, 확인 시점 | GitHub Secret 빌드 주입 후 브라우저 직접 조회. 사업자번호만으로 상호·대표자·주소를 역조회하지 않습니다. |
 | 사업자 통합정보 | 공개 상호·주소·업태·종목·업무 연락처·웹사이트·제품과 출처, 후보·충돌값 구분 | 등록 대상의 정기 수집본. 접근 가능한 공개 자료와 API 활용승인 범위에 한정됩니다. |
 | 등록정보 진위 대조 | 사업자번호·개업일·대표자명 등 입력값 대조 | 국세청 API 연결 필요. 대표자 본인 인증이나 문서 원본 인증이 아닙니다. |
