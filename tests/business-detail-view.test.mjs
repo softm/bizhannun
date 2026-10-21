@@ -1,0 +1,175 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { buildBusinessInsights } from '../src/business-insights.mjs';
+import { resolveBusinessProfile } from '../src/business-profile.mjs';
+import { summarizeEnrichment } from '../src/enrichment.mjs';
+import { buildBusinessDetailReport, renderBusinessDetail } from '../src/business-detail-view.mjs';
+
+const BNO = '6901100416';
+const OTHER = '2208162517';
+const NOW = '2026-10-22T06:00:00Z';
+const STAMP = '2026-10-21T13:00:00Z';
+const source = { id: 'directory', url: 'https://www.bizno.net/article/' + BNO, title: '공개 사업자정보',
+  channel: 'directory', businessNumber: BNO, match: 'exact_bno', collectedAt: STAMP, scope: 'public_business' };
+const record = () => ({ businessNumber: BNO, collectedAt: STAMP, entityType: 'business', sources: [{ ...source }],
+  fields: [['name', '서해박속낙지전문점'], ['address', '경기도 광명시 오리로 1034-1'], ['phone', '02-2682-7211'],
+    ['businessType', '숙박 및 음식점업'], ['businessCategory', '일반한식']].map(([field, value]) => ({ field, value, sourceId: source.id })) });
+const check = overrides => ({ businessNumber: BNO, outcome: 'ok', businessStatus: 'active', taxType: '부가가치세 일반과세자',
+  checkedAt: STAMP, source: { name: '국세청 사업자등록정보', url: 'https://www.data.go.kr/data/15081808/openapi.do' }, ...overrides });
+function fixture({ partner: edits = {}, evidence = record(), currentCheck } = {}) {
+  const latest = currentCheck || check();
+  const partner = { id: 'partner-local-1', businessNumber: BNO, name: '', tags: ['정기 거래'], note: '매월 25일 내부 정산',
+    createdAt: '2026-10-19T03:00:00Z', updatedAt: STAMP, lastCheck: latest, lastSuccess: check(), history: [latest], ...edits };
+  return { partner, linked: resolveBusinessProfile({ businessNumber: BNO, partner, record: evidence }),
+    insights: buildBusinessInsights({ businessNumber: BNO, partner, check: latest, summary: evidence ? summarizeEnrichment(evidence) : null, now: NOW }), generatedAt: NOW };
+}
+const all = view => [view.header, view.tabs, view.body, view.footer].join('');
+
+test('real linked profile renders with provenance, honest gaps and exact business number', () => {
+  const args = fixture();
+  const view = renderBusinessDetail(args);
+  assert.match(view.header, /서해박속낙지전문점/);
+  assert.match(view.header, /690-11-00416/);
+  assert.match(view.body, /경기도 광명시 오리로 1034-1/);
+  assert.match(view.body, /https:\/\/www.bizno.net\/article\/6901100416/);
+  assert.match(view.body, /아직 확인되지 않았어요/);
+  assert.match(view.body, /마지막 성공 조회/);
+  assert.doesNotMatch(all(view), /무사고|>공제 가능<|즉시 발행 유효|자동 일일 감지|실시간 알림 구독|팀원 전체 공유|진위확인증/);
+});
+
+test('failed newest lookup preserves successful status with both distinct timestamps', () => {
+  const success = check({ checkedAt: '2026-10-10T10:00:00Z' });
+  const failed = check({ outcome: 'error', businessStatus: 'unknown', checkedAt: NOW });
+  const args = fixture({ partner: { lastSuccess: success, lastCheck: failed, history: [failed, success] }, currentCheck: failed });
+  const view = renderBusinessDetail(args);
+  assert.match(view.header, /계속사업자/);
+  assert.match(view.header, /직전 성공 기록/);
+  assert.match(view.body, /최근 조회를 완료하지 못해 직전 성공 기록을 표시합니다/);
+  assert.match(view.body, /2026\. 10\. 10\./);
+  assert.match(view.body, /2026\. 10\. 22\./);
+  const report = buildBusinessDetailReport(args);
+  assert.match(report, /직전 성공 기록/);
+  assert.doesNotMatch(report, /정상 지속|>공제 가능<|즉시 발행 유효/);
+});
+
+test('empty profile provides missing states rather than inventing company facts or monitoring', () => {
+  const args = fixture({ evidence: null, currentCheck: check({ outcome: 'not_found', businessStatus: 'unknown' }),
+    partner: { name: '', note: '', tags: [], lastSuccess: null, history: [] } });
+  const html = all(renderBusinessDetail(args));
+  assert.match(html, /미확인/);
+  assert.match(html, /조회 결과 없음/);
+  assert.match(html, /연결한 공개자료가 아직 없습니다/);
+  assert.doesNotMatch(html, /서해박속낙지전문점|02-2682-7211|3개년|자동 알림|암호화/);
+});
+
+test('tab states provide one focusable selected tab and explicitly hidden alternative panels', () => {
+  const view = renderBusinessDetail({ ...fixture(), activeTab: 'history' });
+  assert.equal((view.tabs.match(/aria-selected="true"/g) || []).length, 1);
+  assert.equal((view.tabs.match(/tabindex="0"/g) || []).length, 1);
+  assert.match(view.tabs, /id="detail-tab-history" role="tab" aria-selected="true" aria-controls="detail-panel-history" tabindex="0"/);
+  assert.match(view.body, /id="detail-panel-history" role="tabpanel" aria-labelledby="detail-tab-history" tabindex="0">/);
+  assert.match(view.body, /id="detail-panel-notes" role="tabpanel" aria-labelledby="detail-tab-notes" tabindex="0" hidden>/);
+  assert.equal((view.body.match(/role="tabpanel"/g) || []).length, 5);
+  const invalid = renderBusinessDetail({ ...fixture(), activeTab: '"><script>alert(1)</script>' });
+  assert.match(invalid.tabs, /id="detail-tab-overview" role="tab" aria-selected="true"/);
+  assert.doesNotMatch(all(invalid), /<script>/);
+});
+
+test('all private input and displayed identity text is escaped, and dangerous links stay inert', () => {
+  const attack = '<img src=x onerror=alert(1)>"&';
+  const args = fixture({ partner: { name: attack, note: '</textarea><script>alert(2)</script>', tags: ['<img onerror=alert(3)>'] } });
+  args.linked.nameSourceUrl = 'javascript:alert(4)';
+  const html = all(renderBusinessDetail(args));
+  assert.match(html, /&lt;img/);
+  assert.match(html, /&lt;\/textarea&gt;&lt;script&gt;alert\(2\)&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /<img|<script|href="javascript:/);
+  assert.doesNotMatch(buildBusinessDetailReport({ ...args, includePrivate: true }), /<img|<script|href="javascript:/);
+});
+
+test('draft survives render separately from persisted note and receives honest save feedback', () => {
+  const args = fixture();
+  const html = renderBusinessDetail({ ...args, draft: { note: '아직 저장하지 않은 메모', tags: '납품, 다음 확인' },
+    storageLabel: '내 로그인 계정', error: '저장을 완료하지 못했습니다.' }).body;
+  assert.match(html, /아직 저장하지 않은 메모<\/textarea>/);
+  assert.match(html, /value="납품, 다음 확인"/);
+  assert.match(html, /내 로그인 계정에 보관/);
+  assert.match(html, /id="detail-note-error"[^>]*role="alert"[^>]*>저장을 완료하지 못했습니다/);
+  assert.equal(args.partner.note, '매월 25일 내부 정산');
+});
+
+test('textarea markup protects leading blank lines from HTML parsing across refreshes', () => {
+  const args = fixture();
+  const original = '\n\n첫 문단\n둘째 줄';
+  let note = original;
+  for (let refresh = 0; refresh < 3; refresh++) {
+    const body = renderBusinessDetail({ ...args, draft: { note, tags: '' } }).body;
+    const content = body.match(/<textarea id="detail-note"[^>]*>([\s\S]*?)<\/textarea>/)?.[1];
+    // HTML's textarea parser ignores exactly one LF immediately after the start tag.
+    assert.ok(content?.startsWith('\n'), 'renderer must provide a disposable leading LF');
+    note = content.slice(1);
+    assert.equal(note, original, 'each refresh must preserve both user-supplied leading blank lines');
+  }
+});
+
+test('report excludes private memo, tags and private alias by default, with explicit opt-in', () => {
+  const args = fixture({ partner: { name: '비공개 관리별칭', note: '내부결제조건비밀', tags: ['사내전용태그'] } });
+  const publicReport = buildBusinessDetailReport(args);
+  assert.match(publicReport, /서해박속낙지전문점/);
+  assert.match(publicReport, /국세청이 발급한 공식 증명서/);
+  assert.doesNotMatch(publicReport, /내부결제조건비밀|사내전용태그|비공개 관리별칭|<script|<link /);
+  const privateReport = buildBusinessDetailReport({ ...args, includePrivate: true });
+  assert.match(privateReport, /내부결제조건비밀/);
+  assert.match(privateReport, /사내전용태그/);
+  assert.match(privateReport, /비공개 관리별칭/);
+});
+
+test('mismatched models and linked identities cannot replace current partner data', () => {
+  const args = fixture({ evidence: null });
+  const other = fixture();
+  other.linked = { ...other.linked, businessNumber: OTHER, displayName: '다른 업체 기밀', nameSourceLabel: '다른 출처' };
+  other.insights = { ...other.insights, businessNumber: OTHER, publicName: '다른 업체 기밀', displayName: '다른 업체 기밀' };
+  const combined = { ...args, linked: other.linked, insights: other.insights };
+  assert.doesNotMatch(all(renderBusinessDetail(combined)), /다른 업체 기밀|다른 출처|경기도 광명시 오리로/);
+  assert.doesNotMatch(buildBusinessDetailReport(combined), /다른 업체 기밀/);
+});
+
+test('history rejects foreign-business entries and presents saved history beyond insight summary cap', () => {
+  const history = Array.from({ length: 14 }, (_, index) => check({ checkedAt: new Date(Date.parse(STAMP) - index * 86400000).toISOString() }));
+  history.unshift(check({ businessNumber: OTHER, checkedAt: NOW, source: { name: '다른 업체 비공개 출처' } }));
+  const args = fixture({ partner: { history } });
+  const view = renderBusinessDetail(args);
+  assert.match(view.body, /보관된 최근 14건/);
+  assert.doesNotMatch(view.body, /다른 업체 비공개 출처/);
+  assert.equal((view.body.match(/class="detail-history-content"/g) || []).length, 14);
+});
+
+test('refresh is visibly busy and disabled without substituting a successful response', () => {
+  const view = renderBusinessDetail({ ...fixture(), busy: true });
+  assert.match(view.footer, /data-action="detail-refresh" aria-busy="true" disabled/);
+  assert.match(view.footer, /조회 중…/);
+  assert.match(view.body, /type="submit" class="button primary" disabled/);
+  assert.match(view.header, /계속사업자/);
+});
+
+test('memo saving reports the actual activity while allowing subsequent text edits', () => {
+  const view = renderBusinessDetail({ ...fixture(), busy: true, activity: 'saving' });
+  assert.match(view.footer, /메모 저장 완료를 확인하고 있습니다…/);
+  assert.match(view.footer, /data-action="detail-refresh" aria-busy="false" disabled/);
+  assert.match(view.footer, /국세청 상태 다시 조회/);
+  assert.doesNotMatch(view.footer, /조회 중…|상태를 확인하고 있습니다/);
+  assert.match(view.body, /data-action="detail-reset-note" disabled/);
+  assert.match(view.body, /type="submit" class="button primary" disabled aria-busy="true"/);
+  assert.match(view.body, /저장 중…/);
+  const noteControl = view.body.match(/<textarea id="detail-note"[^>]*>/)?.[0];
+  const tagControl = view.body.match(/<input id="detail-tags"[^>]*>/)?.[0];
+  assert.ok(noteControl && tagControl);
+  assert.doesNotMatch(noteControl + tagControl, /disabled|readonly/);
+});
+
+test('account connection does not claim a status lookup or memo save is running', () => {
+  const view = renderBusinessDetail({ ...fixture(), busy: true, activity: 'connecting' });
+  assert.match(view.footer, /계정 연결 상태를 확인하고 있습니다…/);
+  assert.match(view.footer, /data-action="detail-refresh" aria-busy="false" disabled/);
+  assert.doesNotMatch(view.footer, /조회 중…|메모 저장 완료/);
+  assert.match(view.body, /data-action="detail-reset-note" disabled/);
+});

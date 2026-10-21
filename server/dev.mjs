@@ -10,7 +10,7 @@ import { handleSocialAuth } from './social-auth.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const ROOT_FILES = new Set([
-  '/index.html', '/data-status.html', '/app-config.js', '/styles.css',
+  '/index.html', '/data-status.html', '/app-config.js', '/styles.css', '/business-detail.css',
   '/manifest.webmanifest', '/favicon.ico', '/favicon.svg',
 ]);
 const SOURCE_EXTENSIONS = new Set(['.mjs', '.js', '.css', '.json']);

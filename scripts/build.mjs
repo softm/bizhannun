@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const DIST = join(ROOT, 'dist');
-const ROOT_FILES = ['index.html', 'data-status.html', 'app-config.js', 'styles.css', 'manifest.webmanifest'];
+const ROOT_FILES = ['index.html', 'data-status.html', 'app-config.js', 'styles.css', 'business-detail.css', 'manifest.webmanifest'];
 const REQUIRED_FILES = [
   ...ROOT_FILES, 'assets/favicon.svg',
   ...['app', 'domain', 'storage', 'api-client', 'programs'].map((name) => `src/${name}.mjs`),

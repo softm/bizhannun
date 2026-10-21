@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+
+<html lang="ko"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,300..900;1,300..900&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-primary-container": "#79a297", "border-focus": "#0D3830", "on-tertiary-fixed-variant": "#643c31", "secondary-fixed": "#b6eee0", "error": "#ba1a1a", "primary": "#00221b", "on-primary-fixed": "#00201a", "outline-variant": "#c0c8c5", "primary-fixed": "#c0ecdf", "primary-container": "#0d3830", "surface": "#f8faf7", "surface-container-highest": "#e1e3e1", "tertiary": "#33140b", "inverse-on-surface": "#f0f1ef", "on-tertiary-container": "#c28d7f", "on-background": "#191c1b", "status-active": "#059669", "tertiary-fixed-dim": "#f3b9aa", "on-primary": "#ffffff", "secondary-fixed-dim": "#9bd1c4", "on-surface-variant": "#414846", "tertiary-fixed": "#ffdbd1", "on-secondary-fixed-variant": "#184f45", "accent-emerald": "#10B981", "surface-container": "#edeeec", "on-tertiary": "#ffffff", "surface-container-low": "#f2f4f2", "inverse-primary": "#a5cfc4", "surface-card": "#FFFFFF", "surface-bright": "#f8faf7", "surface-container-high": "#e7e9e6", "on-secondary": "#ffffff", "border-subtle": "#D6E2DB", "inverse-surface": "#2e3130", "surface-container-lowest": "#ffffff", "outline": "#717976", "secondary-container": "#b6eee0", "on-secondary-fixed": "#00201b", "surface-tint": "#3e665c", "secondary": "#33675d", "on-tertiary-fixed": "#31120a", "surface-sage-subtle": "#EBF2EE", "text-tertiary": "#85938D", "text-secondary": "#4B5552", "surface-variant": "#e1e3e1", "surface-dim": "#d9dad8", "error-container": "#ffdad6", "background": "#f8faf7", "on-primary-fixed-variant": "#264e45", "on-surface": "#191c1b", "status-suspended": "#D97706", "on-error-container": "#93000a", "on-error": "#ffffff", "status-closed": "#DC2626", "tertiary-container": "#4c281e", "surface-canvas": "#F4F6F4", "text-primary": "#1A1D1C", "on-secondary-container": "#396d62", "primary-fixed-dim": "#a5cfc4" }, "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, "spacing": { "space-md": "1rem", "space-xl": "2.25rem", "space-lg": "1.5rem", "margin-desktop": "2.5rem", "gutter-desktop": "1.5rem", "margin": "1rem", "gutter": "1rem", "space-sm": "0.5rem", "space-xs": "0.25rem", "margin-tablet": "1.5rem" }, "fontFamily": { "headline-md": ["Manrope"], "metric-display": ["Manrope"], "headline-xl-mobile": ["Manrope"], "body-sm": ["Hanken Grotesk"], "body-md": ["Hanken Grotesk"], "headline-lg": ["Manrope"], "body-lg": ["Hanken Grotesk"], "headline-xl": ["Manrope"], "label-md": ["Hanken Grotesk"], "label-sm": ["Hanken Grotesk"] }, "fontSize": { "headline-md": ["18px", { "lineHeight": "26px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "metric-display": ["30px", { "lineHeight": "36px", "letterSpacing": "-0.03em", "fontWeight": "700" }], "headline-xl-mobile": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700" }], "body-sm": ["12px", { "lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "400" }], "body-md": ["14px", { "lineHeight": "21px", "letterSpacing": "-0.005em", "fontWeight": "400" }], "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "400" }], "headline-xl": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.025em", "fontWeight": "700" }], "label-md": ["13px", { "lineHeight": "18px", "letterSpacing": "0.02em", "fontWeight": "600" }], "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600" }] } } } };</script></head><body class="bg-surface-canvas font-body-md text-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between"><div class="flex flex-col"><div class="h-16 px-space-md flex items-center gap-3 bg-surface-container-lowest"><div class="w-9 h-9 rounded-xl bg-primary-container flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-white text-[20px]">account_balance</span></div><div class="flex flex-col min-w-0"><div class="flex items-center gap-1.5"><span class="font-headline-md text-body-lg font-bold text-primary tracking-tight truncate">사업자한눈</span><span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-surface-sage-subtle text-secondary uppercase">PRO</span></div><span class="font-label-sm text-[10px] text-text-tertiary tracking-wider uppercase truncate">Business at a glance</span></div></div><div class="px-space-md pt-space-md pb-space-sm"><span class="font-label-sm text-label-sm text-text-tertiary tracking-wider font-semibold uppercase px-2">MAIN SERVICE</span></div><nav class="px-3 space-y-1" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-sage-subtle hover:text-on-surface transition-all" data-path="business-lookup" href="#"><div class="flex items-center gap-3"><span class="material-symbols-outlined text-[20px]">search</span><span class="font-body-md text-body-md">사업자 조회</span></div><span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-surface-sage-subtle text-status-active border-subtle">실시간</span></a><a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-sage-subtle hover:text-on-surface transition-all" data-path="partner-management" href="#"><span class="material-symbols-outlined text-[20px]">domain</span><span class="font-body-md text-body-md">거래처 관리</span></a><a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-sage-subtle hover:text-on-surface transition-all" data-path="grant-finder" href="#"><span class="material-symbols-outlined text-[20px]">auto_awesome</span><span class="font-body-md text-body-md">지원사업 찾기</span></a><a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-sage-subtle hover:text-on-surface transition-all" data-path="my-business" href="#"><span class="material-symbols-outlined text-[20px]">storefront</span><span class="font-body-md text-body-md">내 사업</span></a></nav><div class="px-space-md pt-space-lg pb-space-sm"><span class="font-label-sm text-label-sm text-text-tertiary tracking-wider font-semibold uppercase px-2">WORKSPACE</span></div><nav class="px-3 space-y-1" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-sage-subtle hover:text-on-surface transition-all" data-path="audit-log" href="#"><span class="material-symbols-outlined text-[20px]">history</span><span class="font-body-md text-body-md">변경 기록</span></a><a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-sage-subtle hover:text-on-surface transition-all" data-path="account-sync" href="#"><span class="material-symbols-outlined text-[20px]">cloud_sync</span><span class="font-body-md text-body-md">계정 · 동기화</span></a></nav></div><div class="p-space-md"><div class="p-3.5 rounded-xl bg-surface-sage-subtle flex flex-col gap-2.5"><div class="flex items-center justify-between"><div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-status-active"></span><span class="font-label-sm text-label-sm font-semibold text-primary">이 기기에 보관</span></div><span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white text-secondary">암호화 됨</span></div><p class="font-body-sm text-body-sm text-text-secondary leading-snug">조회 내역 및 북마크 정보가 브라우저 보안 스토리지에 안전하게 보관됩니다.</p></div><div class="mt-3 pt-2 px-1 flex items-center justify-between text-text-tertiary"><span class="font-body-sm text-body-sm">시스템 안정성 최신</span><span class="font-label-sm text-label-sm font-semibold tracking-wider">v0.5.2</span></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 px-space-lg flex items-center justify-between"><div class="flex items-center gap-2 text-on-surface-variant"><span class="font-body-sm text-body-sm text-text-tertiary">내 워크스페이스</span><span class="material-symbols-outlined text-[16px] text-text-tertiary">chevron_right</span><span class="font-headline-md text-body-md font-semibold text-on-surface">사업자 조회</span><span class="ml-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-sage-subtle text-secondary font-label-sm text-label-sm"><span class="w-1.5 h-1.5 rounded-full bg-status-active"></span>국세청 홈택스 실시간 연동망 가동 중</span></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-2 text-text-secondary font-body-sm text-body-sm px-2.5 py-1.5 rounded-lg bg-surface-container-low"><span class="material-symbols-outlined text-[18px] text-text-tertiary">calendar_today</span><span>10월 22일 목요일</span></div><button class="relative p-2 rounded-lg text-on-surface-variant hover:bg-surface-sage-subtle hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-error ring-2 ring-white"></span></button><button class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-primary text-on-primary hover:bg-primary-container transition-colors font-label-md text-label-md"><span class="material-symbols-outlined text-[18px]">upload_file</span><span>거래처 일괄 등록</span></button><div class="flex items-center gap-2.5 pl-2"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida/AEtjO1WrPSdlSgBjptj-0SfntGAUNWZk9Qu7F4HScLCSwDUk6LiM-AWMK6RoPa8nUg1dMNqrrnaPX298aBnV-rEmn_2_I0B1l2x63BfarvivxRHqntRiNlLSafY9nZ0HzdKOtGqAVdTihlYCLklKfA7zqQpM7opSCOIW3YtQx97Cp6zeB8kcfOz0HBGmA9L4GKMhyeWIlGcLC-2J9gT41hYJ7rSrecW8b-jZXZWixQ-4XbSGQgfnqvaQUxlTi2hk"/><div class="hidden xl:flex flex-col items-start leading-none"><span class="font-label-md text-label-md text-primary font-semibold">김재무 팀장</span><span class="font-body-sm text-[11px] text-text-tertiary">재무관리팀</span></div></div></div></header><main class="w-full pt-16 min-h-[1024px] bg-surface-canvas" data-stitch-vh="min-h-[1024px]===min-h-screen"><div class="flex flex-col w-full relative">
+<!-- Dimmed Modal Backdrop Over Business Dashboard -->
+<div class="relative w-full px-6 py-8 flex items-center justify-center min-h-[calc(1024px-4rem)]" data-stitch-vh="min-h-[calc(1024px-4rem)]===min-h-[calc(100vh-4rem)]" id="modal-container">
+<!-- Ambient Dashboard Background Placeholder Context (Faintly blurred underneath) -->
+<div class="absolute inset-0 bg-surface-canvas/60 backdrop-blur-[6px] pointer-events-none z-10 transition-opacity duration-300"></div>
+<!-- Active Partner Verification Modal Dialog -->
+<div aria-labelledby="partner-modal-title" aria-modal="true" class="relative z-20 w-full max-w-4xl bg-surface-container-lowest rounded-2xl shadow-2xl border border-border-subtle flex flex-col overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200" role="dialog">
+<!-- Top Action Bar & Header Section -->
+<div class="px-7 pt-6 pb-5 border-b border-surface-container bg-surface-bright flex flex-col gap-4">
+<div class="flex items-start justify-between gap-4">
+<!-- Company Identity & Status Pill -->
+<div class="flex items-start gap-4">
+<div class="w-13 h-13 w-12 h-12 rounded-xl bg-surface-sage-subtle flex items-center justify-center text-primary-container shrink-0 shadow-sm border border-border-subtle/50">
+<span class="material-symbols-outlined text-[26px]">account_balance</span>
+</div>
+<div class="flex flex-col">
+<div class="flex flex-wrap items-center gap-2.5">
+<h2 class="font-headline-lg text-headline-lg text-text-primary tracking-tight font-bold" id="partner-modal-title">
+                  (주)비바리퍼블리카
+                </h2>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-status-active text-body-sm font-semibold border border-emerald-200/60">
+<span class="w-2 h-2 rounded-full bg-status-active animate-pulse"></span>
+                  계속사업자 (정상 영업)
+                </span>
+<span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-surface-sage-subtle text-secondary">
+                  법인사업자
+                </span>
+</div>
+<div class="mt-1 flex flex-wrap items-center gap-x-3 text-body-sm text-text-secondary">
+<span class="font-medium text-text-primary">사업자등록번호: 120-81-47521</span>
+<span class="text-text-tertiary">|</span>
+<span>대표자: 이승건</span>
+<span class="text-text-tertiary">|</span>
+<span class="inline-flex items-center gap-1 text-text-tertiary">
+<span class="material-symbols-outlined text-[15px] text-secondary">verified</span>
+                  홈택스 최종 동기화: 2024.10.22 14:32:08
+                </span>
+</div>
+</div>
+</div>
+<!-- Utility Icons (PDF, Print, Close) -->
+<div class="flex items-center gap-1.5 shrink-0">
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-body-sm text-text-secondary hover:text-text-primary hover:bg-surface-sage-subtle transition-colors border border-border-subtle shadow-xs" title="국세청 진위확인증 PDF 다운로드" type="button">
+<span class="material-symbols-outlined text-[17px] text-primary-container">picture_as_pdf</span>
+<span class="hidden sm:inline font-medium">진위확인증</span>
+</button>
+<button class="p-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-sage-subtle transition-colors border border-border-subtle" title="인쇄하기" type="button">
+<span class="material-symbols-outlined text-[18px]">print</span>
+</button>
+<button aria-label="팝업 닫기" class="ml-1 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-container-high transition-colors" onclick="document.getElementById('modal-container').style.display='none'" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<div class="flex items-center gap-2 border-b border-transparent -mb-5 pt-2 overflow-x-auto" id="modal-tabs">
+<button class="tab-btn active pb-3 px-3 text-body-sm font-semibold text-primary-container border-b-2 border-primary-container transition-all flex items-center gap-1.5" data-tab="tab-overview" type="button">
+<span class="material-symbols-outlined text-[17px]">fact_check</span>
+            기본 및 사업자 상태
+          </button>
+<button class="tab-btn pb-3 px-3 text-body-sm font-medium text-text-tertiary hover:text-text-primary border-b-2 border-transparent transition-all flex items-center gap-1.5" data-tab="tab-tax" type="button">
+<span class="material-symbols-outlined text-[17px]">receipt_long</span>
+            과세유형 &amp; 계산서 적격
+          </button>
+<button class="tab-btn pb-3 px-3 text-body-sm font-medium text-text-tertiary hover:text-text-primary border-b-2 border-transparent transition-all flex items-center gap-1.5" data-tab="tab-history" type="button">
+<span class="material-symbols-outlined text-[17px]">history</span>
+            변동 이력 (Timeline)
+          </button>
+<button class="tab-btn pb-3 px-3 text-body-sm font-medium text-text-tertiary hover:text-text-primary border-b-2 border-transparent transition-all flex items-center gap-1.5" data-tab="tab-notes" type="button">
+<span class="material-symbols-outlined text-[17px]">notes</span>
+            내부 메모 &amp; 관리자
+          </button>
+</div>
+</div>
+<!-- Scrollable Modal Body Container -->
+<div class="p-7 overflow-y-auto max-h-[716px] flex flex-col gap-6 bg-surface-canvas/40">
+<!-- Quick Insight KPI Strip -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="p-4 rounded-xl bg-surface-card border border-border-subtle flex flex-col justify-between">
+<div class="flex items-center justify-between text-text-tertiary">
+<span class="text-body-sm font-medium">세금계산서 수취 자격</span>
+<span class="material-symbols-outlined text-status-active text-[20px]">check_circle</span>
+</div>
+<div class="mt-2 flex items-baseline gap-2">
+<span class="text-headline-md font-bold text-text-primary">일반과세자</span>
+<span class="text-body-sm font-medium text-status-active">공제 가능</span>
+</div>
+<p class="mt-1 text-body-sm text-text-tertiary">매입세액 공제 및 즉시 발행 유효</p>
+</div>
+<div class="p-4 rounded-xl bg-surface-card border border-border-subtle flex flex-col justify-between">
+<div class="flex items-center justify-between text-text-tertiary">
+<span class="text-body-sm font-medium">휴 · 폐업 리스크 지수</span>
+<span class="material-symbols-outlined text-secondary text-[20px]">shield</span>
+</div>
+<div class="mt-2 flex items-baseline gap-2">
+<span class="text-headline-md font-bold text-text-primary">정상 지속</span>
+<span class="text-body-sm font-medium text-secondary">3개년 무사고</span>
+</div>
+<p class="mt-1 text-body-sm text-text-tertiary">신용평가 및 거래제한 이력 없음</p>
+</div>
+<div class="p-4 rounded-xl bg-surface-card border border-border-subtle flex flex-col justify-between">
+<div class="flex items-center justify-between text-text-tertiary">
+<span class="text-body-sm font-medium">누적 모니터링 주기</span>
+<span class="material-symbols-outlined text-primary-container text-[20px]">sync</span>
+</div>
+<div class="mt-2 flex items-baseline gap-2">
+<span class="text-headline-md font-bold text-text-primary">자동 일일 감지</span>
+<span class="text-body-sm font-medium text-primary">실시간</span>
+</div>
+<p class="mt-1 text-body-sm text-text-tertiary">상태 변동 발생 시 즉시 카카오/이메일 알림</p>
+</div>
+</div>
+<!-- Section 1: Detailed Tax Registration Profile -->
+<div class="bg-surface-card rounded-xl p-5 border border-border-subtle shadow-xs">
+<div class="flex items-center justify-between pb-3.5 mb-3.5 border-b border-surface-container">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-[20px]">assured_workload</span>
+<h3 class="font-headline-md text-body-lg font-bold text-text-primary">국세청 실시간 진위확인 내역</h3>
+</div>
+<div class="flex items-center gap-1.5 text-[11px] font-semibold text-secondary px-2.5 py-1 rounded bg-surface-sage-subtle">
+<span class="w-1.5 h-1.5 rounded-full bg-status-active"></span>
+              홈택스 공식 DB 연계
+            </div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-y-3.5 gap-x-8 text-body-sm">
+<div class="flex items-start justify-between py-1 border-b border-surface-container/60">
+<span class="text-text-secondary font-medium">사업자등록상태</span>
+<span class="font-semibold text-text-primary flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-status-active"></span>
+                부가가치세 일반과세자
+              </span>
+</div>
+<div class="flex items-start justify-between py-1 border-b border-surface-container/60">
+<span class="text-text-secondary font-medium">법인등록번호</span>
+<span class="font-semibold text-text-primary font-mono tracking-tight">110111-4928192</span>
+</div>
+<div class="flex items-start justify-between py-1 border-b border-surface-container/60">
+<span class="text-text-secondary font-medium">개업연월일</span>
+<span class="font-semibold text-text-primary">2013년 04월 23일 (업력 11년차)</span>
+</div>
+<div class="flex items-start justify-between py-1 border-b border-surface-container/60">
+<span class="text-text-secondary font-medium">대표자명</span>
+<span class="font-semibold text-text-primary">이승건</span>
+</div>
+<div class="flex items-start justify-between py-1 border-b border-surface-container/60">
+<span class="text-text-secondary font-medium">주업태 / 종목</span>
+<span class="font-semibold text-text-primary">서비스업 / 전자금융업 및 소프트웨어 개발</span>
+</div>
+<div class="flex items-start justify-between py-1 border-b border-surface-container/60">
+<span class="text-text-secondary font-medium">관할 세무서</span>
+<span class="font-semibold text-text-primary">역삼세무서</span>
+</div>
+<div class="col-span-1 md:col-span-2 flex items-start justify-between pt-1">
+<span class="text-text-secondary font-medium shrink-0">사업장 소재지</span>
+<span class="font-semibold text-text-primary text-right pl-4">서울특별시 강남구 테헤란로 142, 아크플레이스 12층</span>
+</div>
+</div>
+</div>
+<!-- Section 2: Settlement & Risk Compliance Banner -->
+<div class="p-4 rounded-xl bg-surface-sage-subtle border border-border-subtle flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+<div class="flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-primary-container text-white flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[19px]">account_balance_wallet</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-md text-body-md font-bold text-primary">재무·회계 지급 전 검증 유의사항</span>
+<p class="text-body-sm text-text-secondary mt-0.5">
+                법인 결제 계좌의 예금주가 법인명 <strong class="text-text-primary">"(주)비바리퍼블리카"</strong>와 일치하는지 출금 전 반드시 대조하세요.
+              </p>
+</div>
+</div>
+<button class="shrink-0 px-3.5 py-2 rounded-lg bg-white border border-border-subtle hover:bg-surface text-primary text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-2xs" type="button">
+<span class="material-symbols-outlined text-[16px]">verified_user</span>
+            계좌 예금주 실명조회
+          </button>
+</div>
+<!-- Section 3: Status Modification Timeline Log -->
+<div class="bg-surface-card rounded-xl p-5 border border-border-subtle shadow-xs">
+<div class="flex items-center justify-between pb-3.5 mb-3.5 border-b border-surface-container">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-[20px]">timeline</span>
+<h3 class="font-headline-md text-body-lg font-bold text-text-primary">사업자 상태 변동 로그</h3>
+</div>
+<span class="text-body-sm text-text-tertiary">최근 3개년 자동 트래킹 기록</span>
+</div>
+<div class="relative pl-6 space-y-5 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-border-subtle">
+<!-- Log Entry 1 -->
+<div class="relative group">
+<div class="absolute -left-[1.65rem] top-1 w-3 h-3 rounded-full bg-status-active ring-4 ring-emerald-50"></div>
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+<span class="text-body-sm font-semibold text-text-primary flex items-center gap-2">
+                  정기 실시간 자동 조회: 이상 없음
+                  <span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-status-active border border-emerald-200">성공</span>
+</span>
+<span class="text-[12px] font-mono text-text-tertiary">2024.10.22 14:32</span>
+</div>
+<p class="text-body-sm text-text-secondary mt-0.5">부가가치세 일반과세자 유지 확인, 세금계산서 수취 적격 상태 판정 완료.</p>
+</div>
+<!-- Log Entry 2 -->
+<div class="relative group">
+<div class="absolute -left-[1.65rem] top-1 w-3 h-3 rounded-full bg-primary-container ring-4 ring-surface-sage-subtle"></div>
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+<span class="text-body-sm font-semibold text-text-primary flex items-center gap-2">
+                  정기 스케줄 상태 일괄 점검
+                  <span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-surface-container text-text-secondary">정기점검</span>
+</span>
+<span class="text-[12px] font-mono text-text-tertiary">2024.07.01 09:00</span>
+</div>
+<p class="text-body-sm text-text-secondary mt-0.5">홈택스 대량 배치 동기화 정상 통과, 세무 상 특이점 없음.</p>
+</div>
+<!-- Log Entry 3 -->
+<div class="relative group">
+<div class="absolute -left-[1.65rem] top-1 w-3 h-3 rounded-full bg-secondary-container ring-4 ring-surface-container"></div>
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+<span class="text-body-sm font-semibold text-text-primary flex items-center gap-2">
+                  사업장 주소 변경사항 반영
+                  <span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-surface-sage-subtle text-secondary">정보변경</span>
+</span>
+<span class="text-[12px] font-mono text-text-tertiary">2024.01.15 11:20</span>
+</div>
+<p class="text-body-sm text-text-secondary mt-0.5">등기부 및 홈택스 사업장 소재지 변경(아크플레이스) 자동 감지 및 사내 ERP 동기화 완료.</p>
+</div>
+</div>
+</div>
+<!-- Section 4: Internal Collaboration & Administrative Notes -->
+<div class="bg-surface-card rounded-xl p-5 border border-border-subtle shadow-xs flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-[20px]">edit_note</span>
+<h3 class="font-headline-md text-body-lg font-bold text-text-primary">담당자 공유 메모 및 계약 설정</h3>
+</div>
+<div class="flex items-center gap-2 text-body-sm text-text-secondary">
+<span>등록 관리:</span>
+<span class="font-semibold text-text-primary">김재무 팀장 (재무관리팀)</span>
+</div>
+</div>
+<div class="relative">
+<textarea class="w-full p-3 text-body-sm text-text-primary bg-surface-canvas rounded-lg border border-border-subtle focus:outline-none focus:border-border-focus transition-colors resize-none leading-relaxed" placeholder="해당 거래처에 대한 정산 일정, 라이선스 계약 내용, 세무 주의사항을 입력하세요." rows="3">2024년 4분기 토스페이먼츠 PG 정산 연동 솔루션 계약 체결 완료. 매월 25일 익월 지급 조건으로 세금계산서 정기 수취 예정 (계약담당: 전략제휴팀 박선우 매니저).</textarea>
+<div class="mt-2 flex items-center justify-between text-body-sm">
+<span class="text-text-tertiary text-[12px]">최종 수정: 2024.10.15 17:40 · 팀원 전체 공유 중</span>
+<button class="px-3 py-1 rounded bg-surface-sage-subtle text-secondary font-semibold text-body-sm hover:bg-secondary-container transition-colors" type="button">
+                메모 저장
+              </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Modal Bottom Actions Footer -->
+<div class="px-7 py-4 bg-surface-bright border-t border-surface-container flex flex-wrap items-center justify-between gap-3">
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 text-body-sm font-semibold text-primary">
+<span class="material-symbols-outlined text-[18px] text-accent-emerald">notifications_active</span>
+            휴·폐업 실시간 알림 구독 중
+          </span>
+<button class="text-body-sm text-text-tertiary hover:text-text-secondary underline underline-offset-2 ml-1" type="button">
+            수신처 변경
+          </button>
+</div>
+<div class="flex items-center gap-2.5">
+<button class="px-4 py-2 rounded-lg border border-border-subtle bg-surface-card hover:bg-surface text-text-primary text-body-sm font-medium transition-colors" onclick="document.getElementById('modal-container').style.display='none'" type="button">
+            닫기
+          </button>
+<button class="px-4 py-2 rounded-lg bg-surface-sage-subtle text-primary hover:bg-secondary-container text-body-sm font-semibold transition-colors flex items-center gap-1.5 border border-border-subtle" type="button">
+<span class="material-symbols-outlined text-[17px]">edit</span>
+            거래처 태그 수정
+          </button>
+<button class="px-5 py-2 rounded-lg bg-primary-container text-white hover:bg-primary transition-colors text-body-sm font-semibold flex items-center gap-1.5 shadow-sm" type="button">
+<span>홈택스 재검증 조회</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Interactive Tab Switcher Script -->
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const tabButtons = document.querySelectorAll('#modal-tabs .tab-btn');
+      tabButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          tabButtons.forEach(b => {
+            b.classList.remove('active', 'text-primary-container', 'border-primary-container', 'font-semibold');
+            b.classList.add('text-text-tertiary', 'border-transparent', 'font-medium');
+          });
+          btn.classList.add('active', 'text-primary-container', 'border-primary-container', 'font-semibold');
+          btn.classList.remove('text-text-tertiary', 'border-transparent', 'font-medium');
+        });
+      });
+    });
+  </script>
+</div></main></div>
+<div id="stitch-agent-cursor" data-stitch-injected style="left:-40px;top:-40px;">
+  <svg class="cursor-pointer" width="20" height="20" viewBox="0 0 34 34" fill="none">
+    <path d="M15.0624 32.3549L5.16251 5.48544L32.0324 15.3848L19.3046 19.6276L15.0624 32.3549Z" fill="#7168f6"/>
+    <path d="M4.80877 5.13207C4.94657 4.99427 5.15206 4.94886 5.33496 5.01606L32.205 14.9156C32.4041 14.9889 32.5354 15.1799 32.5323 15.392C32.529 15.6043 32.392 15.7924 32.1905 15.8595L19.6994 20.0227L15.5369 32.5131C15.4697 32.7145 15.2824 32.8509 15.0701 32.8542C14.8578 32.8575 14.6664 32.7268 14.5929 32.5276L4.69276 5.65826L4.67343 5.5892C4.63863 5.42535 4.68814 5.25283 4.80877 5.13207Z" stroke="rgba(255,255,255,0.15)" stroke-linejoin="round"/>
+  </svg>
+  <svg class="cursor-text" width="20" height="28" viewBox="0 0 20 28" fill="none">
+    <path d="M6 2h8M6 26h8M10 2v24" stroke="#7168f6" stroke-width="2.5" stroke-linecap="round"/>
+  </svg>
+  <svg class="cursor-paint" width="24" height="24" viewBox="0 0 24 24" fill="none">
+    <path d="M18.5 1.5c.8-.8 2.1-.8 2.8 0 .8.8.8 2.1 0 2.8L11 14.5l-3.5 1 1-3.5L18.5 1.5z" fill="#7168f6" stroke="#4f44e1" stroke-width="1" stroke-linejoin="round"/>
+    <path d="M7 14.5c-2 2-3.5 4-3.5 5.5 0 1.5 1 2.5 2.5 2.5 1.5 0 3.5-1.5 5.5-3.5" stroke="#7168f6" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M4 20c-.5.5-1.2 1-2 1.2" stroke="#6056f0" stroke-width="1" stroke-linecap="round"/>
+  </svg>
+  <svg id="stitch-cursor-label" width="28" height="14" viewBox="0 0 28 14" fill="none">
+    <rect width="28" height="14" rx="7" fill="#7168f6"/>
+    <circle cx="10.5" cy="7" r="1.8" fill="white"/>
+    <circle cx="17.5" cy="7" r="1.8" fill="white"/>
+  </svg>
+</div>
+</body></html>

@@ -13,6 +13,7 @@ v0.4의 수집 정보는 출처·확인 시각을 포함해 거래처와 내 사
 - 검색 화면의 정보구조·디자인·탭 설계: [docs/SEARCH_EXPERIENCE.md](docs/SEARCH_EXPERIENCE.md)
 - 상호·업체명 검색 사용법·범위·검증: [docs/NAME_SEARCH.md](docs/NAME_SEARCH.md)
 - 거래처 정보 연결·사업자 인사이트 기획: [docs/BUSINESS_INSIGHTS.md](docs/BUSINESS_INSIGHTS.md)
+- Stitch 거래처 상세·메모·조회 기록: [docs/BUSINESS_DETAIL.md](docs/BUSINESS_DETAIL.md)
 - 사업자 통합정보 수집·출처·확장: [docs/BUSINESS_ENRICHMENT.md](docs/BUSINESS_ENRICHMENT.md)
 - 저장소: [softm/bizhannun](https://github.com/softm/bizhannun)
 - 운영·배포·장애 대응: [docs/OPERATIONS.md](docs/OPERATIONS.md)
@@ -34,6 +35,7 @@ v0.4의 수집 정보는 출처·확인 시각을 포함해 거래처와 내 사
 | 통신판매 신고정보 | 사업자번호가 정확히 일치하는 공개 신고정보 | Actions에 별도 공정위 API 인증키 필요. 통신판매 신고 데이터의 수록 범위에 한정됩니다. |
 | 로그인·계정 보관 | 구글·이메일 로그인, 카카오·네이버 서버 OAuth, UID별 정보 보관 | 카카오·네이버는 개발자 앱 인증값과 Firebase Admin 설정 필요. 같은 제공자의 같은 계정을 사용합니다. |
 | 거래처 관리 | 직접 등록, CSV 가져오기·내보내기, 태그·메모, 일괄 상태 확인 | 로그인 계정은 Firestore에 저장하고, 비로그인 자료는 기기의 IndexedDB에 따로 보관합니다. |
+| 거래처 상세 | 5개 탭의 기본정보·상태·이력·출처·메모, 번호 복사, 조회 기록 저장·인쇄 | 메모 초안을 보존하며 재조회합니다. 공유용 기록은 내부 메모·태그·관리용 별칭을 제외합니다. [동작 안내](docs/BUSINESS_DETAIL.md) |
 | 변경 기록 | 동일 사업자·동일 출처의 성공 응답 사이에서 확인된 상태 변화 | 최초 확인은 기준점입니다. 미조회·오류·미설정 결과로 폐업이나 상태 변화를 만들지 않습니다. |
 | 지원사업 탐색 | 수집한 공개 목록 검색, 입력한 사업 프로필과 관련 조건 표시, 공식 원문 링크 | 자격 충족·선정·수급 가능성을 판정하지 않습니다. 지역·분야 등 공개 목록에 있는 정보만 사용합니다. |
 | 데이터 현황 | 수집 주기·마지막 실행·마지막 성공 자료 강조, 사업자별 채널·URL·시각·건수·실패 사유 | 등록 대상의 실제 실행 결과를 표시합니다. 키 설정·API 성공·일치 자료 확보를 구분합니다. |

@@ -7,7 +7,7 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const scripts = ['app-config.js'];
 const json = ['package.json', 'vercel.json', 'manifest.webmanifest'];
 const requiredFiles = [
-  'index.html', 'data-status.html', 'styles.css', 'assets/favicon.svg',
+  'index.html', 'data-status.html', 'styles.css', 'business-detail.css', 'assets/favicon.svg',
   ...['app', 'domain', 'storage', 'api-client', 'programs'].map((name) => `src/${name}.mjs`),
   'data/programs.json', 'data/collection-status.json',
 ];
