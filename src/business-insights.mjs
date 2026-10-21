@@ -8,6 +8,11 @@ export const BASIC_BUSINESS_FIELDS = Object.freeze(['name', 'address', 'phone', 
 const DAY = 86_400_000;
 const STATUS = { active: '계속사업자', suspended: '휴업자', closed: '폐업자' };
 const OUTCOMES = new Set(['ok', 'error', 'not_found', 'not_configured']);
+// Different prose, lists and unaligned measurement periods are not identity conflicts.
+const CONFLICT_FIELDS = new Set([
+  'name', 'address', 'phone', 'email', 'website', 'businessType', 'businessCategory',
+  'industry', 'foundedAt', 'representative', 'corporateNumber', 'hours',
+]);
 const clean = (value, limit = 500) => typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, limit) : '';
 const own = (value, key) => value && Object.hasOwn(value, key);
 const sameNumber = (value, number) => !!number && normalizeBusinessNumber(value?.businessNumber) === number;
@@ -119,7 +124,7 @@ export function buildBusinessInsights({ businessNumber, partner = null, check = 
     field, label: ENRICHMENT_FIELDS[field], confirmed: byField.has(field), ...(byField.get(field) || {}),
   }));
   const missing = basic.filter(item => !item.confirmed);
-  const conflicts = fields.filter(item => item.conflict).map(item => ({
+  const conflicts = fields.filter(item => item.conflict && CONFLICT_FIELDS.has(item.field)).map(item => ({
     field: item.field, label: item.label, values: [{ value: item.value, source: item.source }, ...item.alternatives],
   }));
   const checkValues = validNumber ? [check, linkedPartner?.lastCheck, linkedPartner?.lastSuccess, ...(Array.isArray(linkedPartner?.history) ? linkedPartner.history : []).slice(0, 50)]
@@ -156,7 +161,7 @@ export function buildBusinessInsights({ businessNumber, partner = null, check = 
       'validate-registration', '등록정보 대조', 3, 'warning');
   }
   if (conflicts.length) add('field-conflicts', conflicts.length + '개 항목의 출처별 값이 다릅니다',
-    conflicts.map(item => item.label).join(' · ') + '의 값과 수집일을 비교하세요. 이전 주소나 상호일 수 있어 단정하지 않습니다.',
+    conflicts.map(item => item.label).join(' · ') + '의 값과 수집일을 비교하세요. 출처마다 기준·시점·표현이 다를 수 있어 오류로 단정하지 않습니다.',
     'insight-view-sources', '출처 차이 확인', 4, 'warning');
   if (staleFields.length || undatedFields.length) add('public-recheck', '공개자료의 기준일을 확인하세요',
     [staleFields.length ? '수집 후 30일이 지난 항목 ' + staleFields.length + '개' : '', undatedFields.length ? '수집 시각을 확인할 항목 ' + undatedFields.length + '개' : ''].filter(Boolean).join(' · ') + '. 수집본이 최신 현황과 다를 수 있습니다.',

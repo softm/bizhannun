@@ -169,6 +169,48 @@ test('conflicts retain differently valued same-business observations, while cand
   assert.match(renderBusinessInsights(model), /data-action="insight-view-sources" data-insight-id="field-conflicts"/);
 });
 
+
+test('NAVER overview/history prose and differently scoped measurements stay as evidence without priority conflicts', () => {
+  // Fixture values intentionally describe different pages, periods and measurement scopes.
+  const observations = [
+    ['description', 'NAVER 회사 소개: 검색·커머스·클라우드 서비스', 'NAVER 연혁: 창립 이후의 주요 서비스 출시 기록'],
+    ['products', '검색, 커머스', '클라우드, 콘텐츠'],
+    ['certifications', '정보보호 인증', '환경 경영 인증'],
+    ['registration', '본사 통신판매업 신고', '사업장별 인허가 목록'],
+    ['revenue', '2025년 연결 매출 10조 원', '2024년 별도 매출 6조 원'],
+    ['employees', '2025년 말 연결 인원 10,000명', '2026년 9월 본사 인원 5,000명'],
+    ['insuranceEmployeeCount', '2026년 9월 국민연금 가입자 4,800명', '2026년 10월 고용보험 가입자 4,700명'],
+    ['insuranceEstablishedAt', '본사 보험 성립일 1999-06-01', '지점 보험 성립일 2010-01-01'],
+    ['insuranceIndustry', '국민연금 적용 업종: 정보서비스업', '산재보험 적용 업종: 전문서비스업'],
+    ['insuranceType', '국민연금', '고용보험'],
+  ];
+  const summary = summarizeEnrichment({
+    businessNumber: OTHER, entityType: 'corporation', collectedAt: STAMP,
+    sources: [
+      source({ id: 'overview', businessNumber: OTHER, url: 'https://www.navercorp.com/company', title: 'NAVER 회사 소개', channel: 'official_website' }),
+      source({ id: 'history', businessNumber: OTHER, url: 'https://www.navercorp.com/company/history', title: 'NAVER 연혁', channel: 'official_website' }),
+    ],
+    fields: [
+      { field: 'name', value: 'NAVER', sourceId: 'overview' },
+      ...observations.flatMap(([field, first, second]) => [
+        { field, value: first, sourceId: 'overview' },
+        { field, value: second, sourceId: 'history' },
+      ]),
+    ],
+  });
+  const model = build({
+    businessNumber: OTHER, partner: { businessNumber: OTHER, name: '' },
+    check: status({ businessNumber: OTHER }), summary,
+  });
+  assert.deepEqual(model.conflicts, []);
+  assert.equal(model.actions.some(item => item.id === 'field-conflicts'), false);
+  for (const [field, first, second] of observations) {
+    const evidence = model.profile.fields.find(item => item.field === field);
+    assert.equal(evidence.conflict, true, field + ' retains the observed value difference');
+    assert.deepEqual(new Set([evidence.value, ...evidence.alternatives.map(item => item.value)]), new Set([first, second]));
+  }
+});
+
 test('timeline compares successful statuses only for the same business and source', () => {
   const history = [
     status({ outcome: 'error', businessStatus: 'unknown', checkedAt: '2026-10-20T10:00:00Z' }),
