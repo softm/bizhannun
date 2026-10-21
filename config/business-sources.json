@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "businesses": [
+    {
+      "businessNumber": "6901100416",
+      "name": "서해박속낙지전문점",
+      "website": "https://bizno.net/article/6901100416",
+      "channel": "directory",
+      "search": true,
+      "verifiedDomain": false
+    },
+    {
+      "businessNumber": "2208162517",
+      "name": "네이버",
+      "website": "https://www.navercorp.com/",
+      "channel": "website",
+      "search": true,
+      "verifiedDomain": true
+    }
+  ]
+}

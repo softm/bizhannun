@@ -6,7 +6,7 @@
 
 - 실행: [사업자한눈](https://softm.github.io/bizhannun/) · [로그인·계정 보관](https://softm.github.io/bizhannun/#account)
 - 데이터 현황: [data-status.html](https://softm.github.io/bizhannun/data-status.html)
-- API 운영 origin: [bizhannun.vercel.app](https://bizhannun.vercel.app/api/health)
+- 사업자 통합정보 수집·출처·확장: [docs/BUSINESS_ENRICHMENT.md](docs/BUSINESS_ENRICHMENT.md)
 - 저장소: [softm/bizhannun](https://github.com/softm/bizhannun)
 - 운영·배포·장애 대응: [docs/OPERATIONS.md](docs/OPERATIONS.md)
 - 구현·배포 검증과 화면 기록: [docs/VERIFICATION.md](docs/VERIFICATION.md)
@@ -18,9 +18,10 @@
 
 | 기능 | 제공하는 내용 | 연결 조건과 한계 |
 | --- | --- | --- |
-| 사업자 상태 조회 | 계속·휴업·폐업 등 국세청 응답, 과세유형, 확인 시점 | 서버에 국세청 API 인증키 필요. 사업자번호만으로 상호·대표자·주소를 역조회하지 않습니다. |
+| 사업자 상태 조회 | 계속·휴업·폐업 등 국세청 응답, 과세유형, 확인 시점 | GitHub Secret 빌드 주입 후 브라우저 직접 조회. 사업자번호만으로 상호·대표자·주소를 역조회하지 않습니다. |
+| 사업자 통합정보 | 공개 상호·주소·업태·종목·업무 연락처·웹사이트·제품과 출처, 후보·충돌값 구분 | 등록 대상의 정기 수집본. 접근 가능한 공개 자료와 API 활용승인 범위에 한정됩니다. |
 | 등록정보 진위 대조 | 사업자번호·개업일·대표자명 등 입력값 대조 | 국세청 API 연결 필요. 대표자 본인 인증이나 문서 원본 인증이 아닙니다. |
-| 통신판매 신고정보 | 사업자번호가 정확히 일치하는 공개 신고정보 | 서버에 공정위 API 인증키 필요. 통신판매 신고 데이터의 수록 범위에 한정됩니다. |
+| 통신판매 신고정보 | 사업자번호가 정확히 일치하는 공개 신고정보 | Actions에 별도 공정위 API 인증키 필요. 통신판매 신고 데이터의 수록 범위에 한정됩니다. |
 | 로그인·계정 보관 | 구글·이메일 로그인, 카카오·네이버 서버 OAuth, UID별 정보 보관 | 카카오·네이버는 개발자 앱 인증값과 Firebase Admin 설정 필요. 같은 제공자의 같은 계정을 사용합니다. |
 | 거래처 관리 | 직접 등록, CSV 가져오기·내보내기, 태그·메모, 일괄 상태 확인 | 로그인 계정은 Firestore에 저장하고, 비로그인 자료는 기기의 IndexedDB에 따로 보관합니다. |
 | 변경 기록 | 동일 사업자·동일 출처의 성공 응답 사이에서 확인된 상태 변화 | 최초 확인은 기준점입니다. 미조회·오류·미설정 결과로 폐업이나 상태 변화를 만들지 않습니다. |
@@ -61,6 +62,7 @@ npm run check   # JS 구문, JSON, 필수 공개 파일 검사
 npm test        # 도메인·API·수집 및 매칭 동작 테스트
 npm run test:rules # Firestore 보안 규칙 에뮬레이터 검사
 npm run collect # 공개 지원사업 데이터 갱신
+node scripts/collect-businesses.mjs # 등록한 공개 사업자 정보 수집
 npm run build   # 공개 파일만 dist/에 생성
 ```
 
@@ -72,20 +74,18 @@ npm run build   # 공개 파일만 dist/에 생성
 
 ### GitHub Pages
 
-Pages는 화면과 공개 지원사업 JSON을 제공합니다. 공공데이터 인증키를 보관하거나 `/api/*` 서버를 실행할 수 없습니다. 실제 사업자 조회에는 별도 API 서버가 필요합니다.
+Pages는 화면과 공개 사업자·지원사업 JSON을 제공합니다. 국세청 상태·진위조회는 브라우저에서 직접 호출하고, 웹·공공 등록자료는 GitHub Actions에서 수집합니다.
 
-1. 저장소의 **Settings → Pages → Build and deployment**에서 Source를 **GitHub Actions**로 설정합니다.
-2. **Settings → Actions → General → Workflow permissions**에서 워크플로가 공개 데이터 JSON을 저장소에 기록할 수 있도록 권한을 설정합니다. 브랜치 보호 정책도 해당 기록 방식과 맞아야 합니다.
-3. 현재 Pages 워크플로는 `https://bizhannun.vercel.app`을 API 기본 주소로 사용합니다. 서버를 바꾸려면 **Settings → Secrets and variables → Actions → Variables**의 `BIZ_API_BASE`에 새 HTTPS origin을 설정합니다. `/api`, 경로, 쿼리, 인증정보는 포함하지 않습니다.
-4. `main` push 또는 Actions의 **Collect public data and deploy Pages → Run workflow**로 배포합니다.
+1. Settings → Pages의 Source를 GitHub Actions로 설정합니다.
+2. Repository Secret `NTS_SERVICE_KEY`를 등록합니다. 이 키는 사용자가 선택한 직접 호출 방식에 따라 배포 후 브라우저에서 확인할 수 있습니다.
+3. `main` push 또는 Actions 수동 실행으로 수집·검사·배포합니다. 매일 한국 시간 06:17에도 실행하도록 정의했습니다.
+4. 사업자 수집 대상·추가 API 승인·실패 시 이전 자료 보존은 [통합정보 안내](docs/BUSINESS_ENRICHMENT.md)를 확인하세요.
 
-공개 API 주소는 브라우저에 전달되는 설정값입니다. `BIZ_API_BASE`에 공공데이터 인증키를 넣으면 안 됩니다. 앱의 조회 서버 연결 화면에서도 브라우저별 서버 주소를 지정할 수 있습니다.
+현재 운영에서 Vercel을 호출하지 않습니다. Firebase 로그인·계정 저장은 Firebase에 직접 연결합니다. 카카오·네이버 로그인은 별도 서버 인증 설정이 필요한 미완료 기능입니다.
 
-빌드의 `BIZ_API_BASE`가 미설정이거나 공백이면 원본 `app-config.js`의 설정을 유지합니다. 비어 있는 저장소 variable이 원본 주소를 지우지 않습니다.
+### 이전 서버 구성 기록
 
-워크플로는 매일 UTC 21:17, 한국 시간 다음 날 06:17에도 실행되도록 정의되어 있습니다. 예약 실행의 실제 시작 시각은 GitHub Actions의 실행 대기와 정책에 영향을 받습니다. 수집 실패 시 이전 성공 데이터를 보존하고 실패 상태를 기록합니다. `data/*.json`의 변경만 `GITHUB_TOKEN`으로 `main`에 커밋하므로 다음 실행에서도 마지막 성공본이 남습니다. 실행 도중 `main`이 바뀌거나 push가 거절되면 강제 병합·강제 push 없이 멈춥니다.
-
-### Vercel
+아래는 이전 Vercel 서버 구성 기록이며 현재 Pages 운영 경로에는 사용하지 않습니다.
 
 Vercel 배포는 정적 화면과 `/api/health`, `/api/status`, `/api/validate`, `/api/commerce`, `/api/config`, `/api/auth` 함수를 함께 제공합니다. 같은 배포 주소에서 화면을 열면 `BIZ_API_BASE`를 비워 두어도 같은 origin의 API를 사용합니다.
 

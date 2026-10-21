@@ -4,6 +4,21 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      business_number:
+        description: '추가 수집할 사업자번호 (비우면 등록 대상 전체 갱신)'
+        type: string
+        required: false
+      company_name:
+        description: '공개 상호'
+        type: string
+        required: false
+      website:
+        description: '수집 시작 웹사이트 URL'
+        type: string
+        required: false
+  issues:
+    types: [opened, edited]
   schedule:
     # UTC 21:17 = Asia/Seoul 06:17 on the following day.
     - cron: '17 21 * * *'
@@ -17,7 +32,11 @@ concurrency:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'issues' ||
+       (startsWith(github.event.issue.title, '[사업자 수집]') &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -47,6 +66,19 @@ jobs:
       - name: Test behavior
         run: npm test
 
+      - name: Register explicit public business collection request
+        env:
+          BIZ_REQUEST_NUMBER: ${{ inputs.business_number }}
+          BIZ_REQUEST_NAME: ${{ inputs.company_name }}
+          BIZ_REQUEST_WEBSITE: ${{ inputs.website }}
+        run: node scripts/business-request.mjs
+
+      - name: Collect business web and public-source evidence
+        env:
+          BUSINESS_PUBLIC_SERVICE_KEY: ${{ secrets.BUSINESS_PUBLIC_SERVICE_KEY || secrets.NTS_SERVICE_KEY }}
+          FTC_SERVICE_KEY: ${{ secrets.FTC_SERVICE_KEY }}
+        run: node scripts/collect-businesses.mjs
+
       - name: Refresh public support program data
         # Expected upstream failures are recorded by the collector while the
         # last successful snapshot stays intact. A broken collector still fails.
@@ -61,13 +93,13 @@ jobs:
             echo "main changed during validation. Stop without merging or overwriting; run again against the new main."
             exit 1
           fi
-          git add -- 'data/*.json'
+          git add -- 'data/*.json' 'data/enrichment/index.json' 'config/business-sources.json'
           if git diff --cached --quiet; then
-            echo "Public data is unchanged."
+            echo "Public evidence and data are unchanged."
             exit 0
           fi
           while IFS= read -r path; do
-            if [[ ! "$path" =~ ^data/[^/]+\.json$ ]]; then
+            if [[ ! "$path" =~ ^data/[^/]+\.json$ && "$path" != "data/enrichment/index.json" && "$path" != "config/business-sources.json" ]]; then
               echo "Refusing to commit a file outside the public data allowlist."
               exit 1
             fi

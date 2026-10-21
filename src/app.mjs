@@ -2,6 +2,8 @@ import { normalizeBusinessNumber, formatBusinessNumber, isValidBusinessNumber, p
 import { emptyWorkspace, loadWorkspace, saveWorkspace, downloadText, validateBackup } from './storage.mjs';
 import { callApi, validateApiBase, failureResult } from './api-client.mjs';
 import { loadPrograms, rankPrograms } from './programs.mjs';
+import { loadEnrichment } from './enrichment.mjs';
+import { renderEnrichment, enrichmentNote } from './enrichment-view.mjs';
 import { createAuthClient } from './auth.mjs';
 import { createCloudWorkspace, mergeGuestWorkspace } from './cloud-storage.mjs';
 
@@ -82,7 +84,7 @@ let importSelection = 0;
 const selected = new Set();
 const ui = {
   view: document.body.dataset.page === 'data' ? 'data' : (location.hash.slice(1).split('?')[0] || 'lookup'),
-  mode: 'partner', lookupNumber: '', lookup: null, commerce: null, lookupBusy: false,
+  enrichment:null, enrichmentBusy:false, enrichmentError:'', mode: 'partner', lookupNumber: '', lookup: null, commerce: null, lookupBusy: false,
   partnerQuery: '', partnerStatus: 'all', programQuery: '', programCategory: '', openOnly: true,
   page: 1, profileDraft: null, batchBusy: false, batchDone: 0, batchTotal: 0, mobileMenu: false
 };
@@ -338,7 +340,7 @@ function lookupView() {
       <div class="search-meta"><span>${icon('shield')} 국세청 공개정보 기반</span><span>${icon('file')} 하이픈 없이 입력 가능</span><span>${icon('info')} 상호·주소는 출처별 제공 범위가 달라요</span></div>
     </div>
   </section>
-  ${ui.lookup?lookupResultView():''}
+  ${ui.lookup?lookupResultView()+renderEnrichment({businessNumber:ui.lookup.businessNumber,record:ui.enrichment?.record,summary:ui.enrichment?.summary,loading:ui.enrichmentBusy,error:ui.enrichmentError,name:byNumber(ui.lookup.businessNumber)?.name||''}):''}
   ${statsView()}
   <div class="content-grid">
     <section class="card"><div class="card-header"><h2>내 거래처 <span class="pill-label" style="margin-left:6px">${number(workspace.partners.length)}</span></h2><a class="text-button" href="./#partners" data-nav="partners">전체 보기 ${icon('chevron')}</a></div>
@@ -362,10 +364,10 @@ function lookupResultView() {
   const registered=byNumber(r.businessNumber);
   const profile=commerce?.records?.[0];
   const insights=buildInsights(registered||{businessNumber:r.businessNumber,name:profile?.name||'',lastCheck:r,lastSuccess:r.outcome==='ok'?r:null,history:[r]});
-  return `<section class="card result-panel" aria-live="polite"><div class="card-header"><div><h2>${esc(profile?.name||registered?.name||'사업자 조회 결과')}</h2><span class="subline">${formatBusinessNumber(r.businessNumber)}</span></div><div class="button-row">${badge(r)}<button class="icon-button" data-action="close-result" aria-label="조회 결과 접기">${icon('x')}</button></div></div><div class="result-body">
+  return `<section class="card result-panel" aria-live="polite"><div class="card-header"><div><h2>${esc(ui.enrichment?.summary?.profile?.name||profile?.name||registered?.name||'사업자 조회 결과')}</h2><span class="subline">${formatBusinessNumber(r.businessNumber)}</span></div><div class="button-row">${badge(r)}<button class="icon-button" data-action="close-result" aria-label="조회 결과 접기">${icon('x')}</button></div></div><div class="result-body">
     ${r.outcome!=='ok'?`<div class="callout ${r.outcome==='error'?'warning':''}">${icon('info')}<span>${esc(r.message||'이 출처에서 사업자 정보를 확인하지 못했습니다.')}${r.outcome==='not_configured'?' 거래처를 먼저 저장해 두고 연결 후 다시 확인할 수 있어요.':''}</span></div>`:''}
     <dl class="detail-grid"><div class="detail-fact"><dt>사업자 상태</dt><dd>${r.outcome==='ok'?esc(r.statusLabel||statusNames[r.businessStatus]):'미확인'}<small>${esc(getSourceName(r.source))}</small></dd></div><div class="detail-fact"><dt>과세유형</dt><dd>${esc(r.taxType||'미확인')}<small>조회 응답 기준</small></dd></div>${r.closedAt?`<div class="detail-fact"><dt>폐업일</dt><dd>${esc(fmtDate(r.closedAt))}</dd></div>`:''}${profile?`<div class="detail-fact"><dt>통신판매 등록 상호</dt><dd>${esc(profile.name||'미제공')}<small>공정거래위원회 · 번호 일치 자료</small></dd></div><div class="detail-fact"><dt>공개 사업장 주소</dt><dd>${esc(profile.address||'미제공')}<small>등록 자료의 주소</small></dd></div>`:''}</dl>
-    ${insights.slice(0,3).map(insight=>`<div class="insight-card ${esc(insight.tone)}">${icon(insight.tone==='warning'?'info':'shield')}<div><h3>${esc(insight.title)}</h3><p>${esc(insight.description)}</p>${insight.action?`<div class="insight-action">${esc(insight.action)}</div>`:''}</div></div>`).join('')}
+    ${insights.filter(insight=>insight.tone==='warning').slice(0,2).map(insight=>`<div class="insight-card ${esc(insight.tone)}">${icon(insight.tone==='warning'?'info':'shield')}<div><h3>${esc(insight.title)}</h3><p>${esc(insight.description)}</p>${insight.action?`<div class="insight-action">${esc(insight.action)}</div>`:''}</div></div>`).join('')}
     <div class="source-info-line">${external(getSourceUrl(r),getSourceName(r.source))} · 조회시각 ${esc(fmtTime(r.checkedAt))}${commerce?` · 통신판매: ${commerce.outcome==='ok'?number(commerce.records?.length||0)+'건 확인':commerce.outcome==='not_found'?'해당 자료 없음':'미확인'}`:''}</div>
     <div class="button-row result-note"><button class="button primary small" data-action="save-lookup">${icon(registered?'edit':'plus')} ${registered?'거래처 정보 수정':'거래처에 저장'}</button>${ui.mode==='mine'?`<button class="button light small" data-action="use-mine">내 사업으로 입력 ${icon('arrow')}</button>`:''}<button class="button small" data-action="validate-open">${icon('check')} 등록정보 진위 대조</button><a class="text-button" href="./#data" data-nav="data">연동 상태 보기 ${icon('chevron')}</a></div>
   </div></section>`;
@@ -534,6 +536,11 @@ function connectionModal() {
   if(window.BIZHANNUN_CONFIG?.mode==='direct'){toast('브라우저에서 국세청으로 직접 조회합니다.');return;}
   openModal('조회 서버 연결',`<form id="connection-form"><div class="callout">${icon('shield')}<span>서버의 HTTPS 주소만 입력합니다. 국세청·공정위 인증키는 여기에 입력하지 마세요.</span></div><div class="form-field" style="margin-top:17px"><label for="api-base">API 서버 주소</label><input id="api-base" name="apiBase" type="url" value="${esc(currentApiBase())}" placeholder="https://api.example.com"><span class="hint">입력한 서버로 조회할 사업자번호가 전달됩니다. 본인이 운영하거나 신뢰하는 서버만 사용하세요.</span></div><div id="connection-error" class="field-error" role="alert"></div><div class="modal-actions"><button class="button" type="button" data-action="close-modal">취소</button><button class="button primary" type="submit">저장하고 연결 확인</button></div></form>`);
 }
+function enrichmentRequestModal(){
+  if(!ui.lookup)return;
+  const name=ui.enrichment?.summary?.profile?.name||byNumber(ui.lookup.businessNumber)?.name||'';
+  openModal('웹 정보 수집 요청',`<form id="enrichment-request-form"><p class="fine-print">사업자번호와 아래 입력은 공개 수집 요청으로 기록됩니다. 내부 메모·비공개 연락처는 입력하지 마세요. 운영자 계정의 요청은 자동 수집하며, 일반 요청은 운영자 확인 후 수집합니다.</p><div class="form-grid section-spacer"><div class="form-field full-span"><label for="enrich-bno">사업자등록번호</label><input id="enrich-bno" name="businessNumber" readonly value="${esc(ui.lookup.businessNumber)}"></div><div class="form-field full-span"><label for="enrich-name">상호</label><input id="enrich-name" name="name" maxlength="200" value="${esc(name)}"></div><div class="form-field full-span"><label for="enrich-url">수집할 공개 웹사이트 (선택)</label><input id="enrich-url" name="website" type="url" maxlength="2048" placeholder="https://회사홈페이지 또는 사업자정보 페이지"></div></div><p class="fine-print">회사소개·연락처·제품·채용·SNS 링크를 수집합니다. 접근이 제한된 페이지는 건너뛰며, 결과는 수집·배포 후 이 화면에 반영됩니다.</p><div class="modal-actions"><button class="button" type="button" data-action="close-modal">취소</button><button class="button primary" type="submit">공개 요청 작성 화면 열기 ↗</button></div></form>`);
+}
 function validateModal() {
   if(!ui.lookup)return;
   openModal('등록정보 진위 대조',`<form id="validate-form"><p class="fine-print">사업자등록증의 개업일과 대표자명을 국세청 입력값과 대조합니다. 대표자 본인 인증이나 문서 원본 인증 기능은 아닙니다.</p><div class="form-grid" style="margin-top:17px"><div class="form-field full-span"><label>사업자등록번호</label><input readonly name="b_no" value="${formatBusinessNumber(ui.lookup.businessNumber)}"></div><div class="form-field"><label for="validation-date">개업일</label><input id="validation-date" name="start_dt" type="date" required></div><div class="form-field"><label for="validation-name">대표자명</label><input id="validation-name" name="p_nm" maxlength="100" required autocomplete="off"></div></div><p class="fine-print" style="margin-top:12px">확인 버튼을 누르면 입력값을 조회 서버를 통해 국세청으로 전달합니다. 대표자명·개업일은 이 앱의 거래처 기록에 저장하지 않습니다.</p><div id="validation-result" aria-live="polite"></div><div class="modal-actions"><button class="button" type="button" data-action="close-modal">닫기</button><button class="button primary" type="submit">입력정보 확인</button></div></form>`);
@@ -582,6 +589,12 @@ function dedupeEvents(existing,events) {
   const seen=new Set(existing.map(e=>e.id));
   return [...events.filter(e=>!seen.has(e.id)),...existing].slice(0,1000);
 }
+async function refreshEnrichment(bno,serial=lookupSerial){
+  ui.enrichmentBusy=true;
+  try{const result=await loadEnrichment(bno);if(serial!==lookupSerial)return;ui.enrichment=result;ui.enrichmentError='';}
+  catch{if(serial===lookupSerial)ui.enrichmentError='공개 정보 수집본을 불러오지 못했습니다. 잠시 후 자료 새로고침을 눌러 주세요.';}
+  finally{if(serial===lookupSerial){ui.enrichmentBusy=false;render();}}
+}
 async function lookup(value) {
   const bno=normalizeBusinessNumber(value);
   ui.lookupNumber=value;
@@ -591,7 +604,8 @@ async function lookup(value) {
     return;
   }
   const serial=++lookupSerial;
-  ui.lookupBusy=true;ui.commerce=null;render();
+  ui.lookupBusy=true;ui.lookup=null;ui.commerce=null;ui.enrichment=null;ui.enrichmentError='';ui.enrichmentBusy=true;render();
+  void refreshEnrichment(bno,serial);
   try {
     const result=await callApi('status',{businessNumbers:[bno]},currentApiBase());
     if(serial!==lookupSerial)return;
@@ -694,6 +708,16 @@ async function validateRegistration(form) {
   finally {button.disabled=false;}
 }
 
+document.addEventListener('submit',event=>{
+  if(event.target.id!=='enrichment-request-form')return;
+  event.preventDefault();event.stopImmediatePropagation();
+  const form=event.target;if(!form.reportValidity())return;
+  const data=new FormData(form),bno=String(data.get('businessNumber')),name=String(data.get('name')||'').trim(),website=String(data.get('website')||'').trim();
+  let url;try{url=website?new URL(website):null;if(url&&(!['https:','http:'].includes(url.protocol)||url.username||url.password))throw Error();}catch{toast('공개 웹사이트의 HTTPS 주소를 입력해 주세요.',true);return;}
+  const body=`### 사업자등록번호\n${bno}\n\n### 상호\n${name||'_미입력_'}\n\n### 수집할 공개 웹사이트\n${url?.href||'_미입력_'}\n\n공개 사업자 정보 수집을 요청합니다. 개인정보와 내부 메모는 포함하지 않습니다.`;
+  const target=new URL('https://github.com/softm/bizhannun/issues/new');target.searchParams.set('title','[사업자 수집] '+bno);target.searchParams.set('body',body);
+  window.open(target.href,'_blank','noopener,noreferrer');
+},true);
 document.addEventListener('submit',async event=>{
   const form=event.target;
   if(!['lookup-form','partner-form','profile-form','connection-form','validate-form','auth-email-form'].includes(form.id))return;
@@ -775,7 +799,16 @@ document.addEventListener('click',async event=>{
   if(action==='add-partner'){partnerModal();return;}
   if(action==='edit-partner'){partnerModal(byId(id));return;}
   if(action==='detail'){detailModal(byId(id));return;}
-  if(action==='save-lookup'){partnerModal(byNumber(ui.lookup.businessNumber),{businessNumber:ui.lookup.businessNumber,name:ui.commerce?.records?.[0]?.name||''});return;}
+  if(action==='reload-enrichment'){if(ui.lookup)await refreshEnrichment(ui.lookup.businessNumber);return;}
+  if(action==='enrichment-export'){if(ui.enrichment?.record)downloadText('사업자한눈_공개정보_'+ui.lookup.businessNumber+'.json',JSON.stringify(ui.enrichment.record,null,2),'application/json');return;}
+  if(action==='save-enrichment-note'){
+    if(!ui.lookup||!ui.enrichment?.summary)return;
+    const old=byNumber(ui.lookup.businessNumber),note=[old?.note,enrichmentNote(ui.enrichment.summary)].filter(Boolean).join('\n\n');
+    if(note.length>5000){toast('기존 메모와 공개자료를 합치면 5,000자를 초과합니다. 수집 자료 JSON을 보관해 주세요.',true);return;}
+    partnerModal(old?{...old,name:old.name||ui.enrichment.summary.profile.name||'',note}:null,{businessNumber:ui.lookup.businessNumber,name:ui.enrichment.summary.profile.name||'',note});return;
+  }
+  if(action==='enrichment-request'){enrichmentRequestModal();return;}
+  if(action==='save-lookup'){partnerModal(byNumber(ui.lookup.businessNumber),{businessNumber:ui.lookup.businessNumber,name:ui.enrichment?.summary?.profile?.name||ui.commerce?.records?.[0]?.name||''});return;}
   if(action==='use-mine'){
     const name=ui.commerce?.records?.[0]?.name||workspace.profile.name||'';
     if(await persist({...workspace,profile:{...workspace.profile,businessNumber:ui.lookup.businessNumber,name,providedBy:'user'}}))go('profile');

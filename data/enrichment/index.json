@@ -1,0 +1,272 @@
+{
+  "businesses": [
+    {
+      "businessNumber": "6901100416",
+      "name": "서해박속낙지전문점",
+      "sources": [
+        {
+          "id": "reviewed-bizno-6901100416",
+          "url": "https://bizno.net/article/6901100416",
+          "title": "비즈노 · 서해박속낙지전문점 공개 사업자정보",
+          "channel": "directory",
+          "businessNumber": "6901100416",
+          "match": "exact_bno",
+          "scope": "public_business",
+          "collectedAt": "2026-10-21T13:22:53.376330Z",
+          "publishedAt": null
+        },
+        {
+          "id": "candidate-instagram-octobaksok",
+          "url": "https://www.instagram.com/octobaksok/",
+          "title": "서해박속낙지전문점 Instagram · 계정 동일성 확인 필요",
+          "channel": "social",
+          "match": "candidate",
+          "collectedAt": "2026-10-21T13:22:53.376330Z",
+          "publishedAt": null
+        },
+        {
+          "id": "candidate-blog-khtd1831",
+          "url": "https://m.blog.naver.com/PostView.naver?blogId=khtd1831&logNo=223270782688",
+          "title": "박속낙지탕 방송정보 관련 블로그 · 후보",
+          "channel": "news",
+          "match": "candidate",
+          "collectedAt": "2026-10-21T13:22:53.376330Z",
+          "publishedAt": null
+        }
+      ],
+      "fields": [
+        {
+          "field": "name",
+          "value": "서해박속낙지전문점",
+          "sourceId": "reviewed-bizno-6901100416",
+          "match": "exact_bno",
+          "scope": "public_business"
+        },
+        {
+          "field": "address",
+          "value": "경기도 광명시 오리로 1034-1(광명동)",
+          "sourceId": "reviewed-bizno-6901100416",
+          "match": "exact_bno",
+          "scope": "public_business"
+        },
+        {
+          "field": "phone",
+          "value": "02-2682-7211",
+          "sourceId": "reviewed-bizno-6901100416",
+          "match": "exact_bno",
+          "scope": "public_business"
+        },
+        {
+          "field": "businessType",
+          "value": "숙박 및 음식점업",
+          "sourceId": "reviewed-bizno-6901100416",
+          "match": "exact_bno",
+          "scope": "public_business"
+        },
+        {
+          "field": "businessCategory",
+          "value": "일반한식",
+          "sourceId": "reviewed-bizno-6901100416",
+          "match": "exact_bno",
+          "scope": "public_business"
+        },
+        {
+          "field": "industry",
+          "value": "한식 일반 음식점업",
+          "sourceId": "reviewed-bizno-6901100416",
+          "match": "exact_bno",
+          "scope": "public_business"
+        }
+      ],
+      "collectedAt": "2026-10-21T13:22:53.376330Z",
+      "collection": {
+        "status": "success",
+        "lastAttemptAt": "2026-10-21T13:22:53.376330Z",
+        "lastSuccessAt": "2026-10-21T13:22:53.376330Z",
+        "sourceStatuses": [
+          {
+            "provider": "comwel",
+            "insuranceType": "1",
+            "label": "산재보험",
+            "sourceUrl": "https://www.data.go.kr/data/15059256/openapi.do",
+            "checkedAt": "2026-10-21T13:20:28.218Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "근로복지공단 API 인증키와 별도 활용신청 승인이 필요합니다."
+          },
+          {
+            "provider": "comwel",
+            "insuranceType": "2",
+            "label": "고용보험",
+            "sourceUrl": "https://www.data.go.kr/data/15059256/openapi.do",
+            "checkedAt": "2026-10-21T13:20:28.218Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "근로복지공단 API 인증키와 별도 활용신청 승인이 필요합니다."
+          },
+          {
+            "provider": "ftc",
+            "insuranceType": "",
+            "label": "공정위 통신판매업",
+            "sourceUrl": "https://www.data.go.kr/data/15126315/openapi.do",
+            "checkedAt": "2026-10-21T13:20:28.219Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "errorCode": "not_configured",
+            "message": "공정위 통신판매 API 인증키가 설정되지 않았습니다."
+          }
+        ]
+      },
+      "bno": "6901100416",
+      "entityType": "business",
+      "officialDomain": null
+    },
+    {
+      "businessNumber": "2208162517",
+      "name": "네이버",
+      "sources": [
+        {
+          "id": "reviewed-navercorp-home",
+          "url": "https://www.navercorp.com/main",
+          "title": "NAVER 공식 기업 홈페이지",
+          "channel": "official_website",
+          "match": "confirmed_domain",
+          "collectedAt": "2026-10-21T13:22:53.376330Z",
+          "publishedAt": null
+        },
+        {
+          "id": "candidate-naver-recruit",
+          "url": "https://recruit.navercorp.com/",
+          "title": "NAVER 채용 · 공식 홈페이지에 연결된 링크",
+          "channel": "jobs",
+          "match": "candidate",
+          "collectedAt": "2026-10-21T13:22:53.376330Z",
+          "publishedAt": null
+        },
+        {
+          "id": "candidate-naver-news",
+          "url": "https://www.navercorp.com/media/pressReleases",
+          "title": "NAVER 보도자료 · 공식 홈페이지에 연결된 링크",
+          "channel": "news",
+          "match": "candidate",
+          "collectedAt": "2026-10-21T13:22:53.376330Z",
+          "publishedAt": null
+        }
+      ],
+      "fields": [
+        {
+          "field": "name",
+          "value": "네이버",
+          "sourceId": "reviewed-navercorp-home",
+          "match": "confirmed_domain"
+        },
+        {
+          "field": "website",
+          "value": "https://www.navercorp.com/",
+          "sourceId": "reviewed-navercorp-home",
+          "match": "confirmed_domain"
+        },
+        {
+          "field": "description",
+          "value": "기술과 서비스로 세상의 가능성을 연결하는 기업",
+          "sourceId": "reviewed-navercorp-home",
+          "match": "confirmed_domain"
+        },
+        {
+          "field": "products",
+          "value": "검색, 광고, 커머스, 클라우드, 핀테크, 콘텐츠, 지도 서비스",
+          "sourceId": "reviewed-navercorp-home",
+          "match": "confirmed_domain"
+        }
+      ],
+      "collectedAt": "2026-10-21T13:22:53.376330Z",
+      "collection": {
+        "status": "success",
+        "lastAttemptAt": "2026-10-21T13:22:53.376330Z",
+        "lastSuccessAt": "2026-10-21T13:22:53.376330Z",
+        "sourceStatuses": [
+          {
+            "provider": "comwel",
+            "insuranceType": "1",
+            "label": "산재보험",
+            "sourceUrl": "https://www.data.go.kr/data/15059256/openapi.do",
+            "checkedAt": "2026-10-21T13:20:28.220Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "근로복지공단 API 인증키와 별도 활용신청 승인이 필요합니다."
+          },
+          {
+            "provider": "comwel",
+            "insuranceType": "2",
+            "label": "고용보험",
+            "sourceUrl": "https://www.data.go.kr/data/15059256/openapi.do",
+            "checkedAt": "2026-10-21T13:20:28.220Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "근로복지공단 API 인증키와 별도 활용신청 승인이 필요합니다."
+          },
+          {
+            "provider": "ftc",
+            "insuranceType": "",
+            "label": "공정위 통신판매업",
+            "sourceUrl": "https://www.data.go.kr/data/15126315/openapi.do",
+            "checkedAt": "2026-10-21T13:20:28.220Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "errorCode": "not_configured",
+            "message": "공정위 통신판매 API 인증키가 설정되지 않았습니다."
+          }
+        ]
+      },
+      "bno": "2208162517",
+      "entityType": "corporation",
+      "officialDomain": "www.navercorp.com",
+      "website": "https://www.navercorp.com/"
+    }
+  ],
+  "meta": {
+    "generatedAt": "2026-10-21T13:22:53.376330Z",
+    "status": "success",
+    "attemptedCount": 2,
+    "businessCount": 2,
+    "failedCount": 2,
+    "errors": [
+      {
+        "businessNumber": "6901100416",
+        "code": "getaddrinfoEAI_AGAINbiznonet"
+      },
+      {
+        "businessNumber": "2208162517",
+        "code": "getaddrinfoEAI_AGAINwwwnavercorpcom"
+      }
+    ],
+    "policy": "Public business facts with source attribution; candidates are not canonical facts.",
+    "collectionVersion": 1,
+    "method": "reviewed_public_source_snapshots",
+    "sourceCount": 6
+  }
+}

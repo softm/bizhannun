@@ -1,0 +1,132 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { ENRICHMENT_FIELDS, safeEnrichmentUrl, normalizeEnrichment, summarizeEnrichment, loadEnrichment } from '../src/enrichment.mjs';
+const BNO = '2208162517';
+const stamp = '2026-10-21T13:00:00Z';
+const record = () => ({
+  businessNumber: BNO, collectedAt: stamp, officialDomain: 'company.example.com', entityType: 'corporation',
+  sources: [
+    { id: 'registry', url: 'https://registry.example.com/company/123', title: '등록정보', channel: 'registry', match: 'exact_bno', businessNumber: BNO, collectedAt: stamp, scope: 'public_business' },
+    { id: 'site', url: 'https://company.example.com/about', title: '회사 소개', channel: 'website', match: 'confirmed_domain', collectedAt: stamp, scope: 'public_business' },
+    { id: 'news', url: 'https://news.example.com/article/123', title: '동명 회사 기사', channel: 'news', match: 'candidate', collectedAt: stamp },
+  ],
+  fields: [
+    { field: 'name', value: '주식회사 테스트', sourceId: 'registry' },
+    { field: 'address', value: '서울시 테스트길 1', sourceId: 'registry' },
+    { field: 'address', value: '서울시 테스트길 2', sourceId: 'site' },
+    { field: 'phone', value: '02-123-4567', sourceId: 'site' },
+    { field: 'email', value: 'contact@company.example.com', sourceId: 'site' },
+    { field: 'representative', value: '공개법인대표', sourceId: 'registry' },
+    { field: 'name', value: '다른 테스트 회사', sourceId: 'news', match: 'exact_bno' },
+  ],
+});
+const json = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
+
+test('confirmed facts retain field-level origins and conflicting values are not discarded', () => {
+  const result = summarizeEnrichment(record());
+  assert.equal(result.profile.name, '주식회사 테스트');
+  assert.equal(result.profile.phone, '02-123-4567');
+  assert.equal(result.confirmedCount, 2);
+  assert.equal(result.candidateCount, 1);
+  const address = result.fields.find(item => item.field === 'address');
+  assert.equal(address.conflict, true);
+  assert.equal(address.sourceId, 'registry');
+  assert.equal(address.alternatives[0].value, '서울시 테스트길 2');
+  assert.equal(result.candidateFields[0].value, '다른 테스트 회사');
+});
+
+test('same names, missing BRN evidence and lookalike domains never upgrade candidate identities', () => {
+  const input = record();
+  delete input.sources[0].businessNumber;
+  input.sources[1].url = 'https://company.example.com.attacker.com/about';
+  const result = summarizeEnrichment(input);
+  assert.deepEqual(result.profile, {});
+  assert.equal(result.confirmedCount, 0);
+  assert.equal(result.candidateCount, 3);
+  input.sources[0].matchedBusinessNumber = '1048137225';
+  assert.equal(normalizeEnrichment(input).sources[0].match, 'candidate');
+});
+
+test('explicit candidate fields cannot be promoted by a verified source', () => {
+  const input = record();
+  input.fields[0].match = 'candidate';
+  const result = summarizeEnrichment(input);
+  assert.equal(result.profile.name, undefined);
+  assert.equal(result.candidateFields.filter(item => item.field === 'name').length, 2);
+});
+
+test('personal contacts and representative of a sole trader are excluded', () => {
+  const input = record();
+  input.entityType = 'business';
+  input.sources[1].scope = 'personal';
+  input.fields.push({ field: 'homeAddress', value: '개인 집 주소', sourceId: 'registry' },
+    { field: 'residentRegistrationNumber', value: '주민번호', sourceId: 'registry' },
+    { field: 'personalPhone', value: '010-1234-5678', sourceId: 'registry' });
+  const result = summarizeEnrichment(input);
+  assert.equal(result.profile.phone, undefined);
+  assert.equal(result.profile.email, undefined);
+  assert.equal(result.profile.representative, undefined);
+  assert.equal(result.fields.some(item => /personal|resident|home/.test(item.field)), false);
+  input.fields.find(item => item.field === 'phone').scope = 'public_business';
+  assert.equal(summarizeEnrichment(input).profile.phone, '02-123-4567');
+});
+
+test('malicious URL schemes, credentials, API key queries, private IPs and unusual ports are rejected', () => {
+  for (const value of ['javascript:alert(1)', 'data:text/html,<script>x</script>', 'https://name:password@example.com/',
+    'https://example.com/?serviceKey=abc', 'https://example.com/?%61piKey=abc',
+    'https://example.com/?key=abc', 'https://example.com/?access_token=abc',
+    'http://127.0.0.1/', 'https://2130706433/', 'http://[::1]/', 'https://internal.local/',
+    'https://intranet/', 'https://example.com:444/']) assert.equal(safeEnrichmentUrl(value), null, value);
+  assert.equal(safeEnrichmentUrl('https://example.com/news?id=123#footer'), 'https://example.com/news?id=123');
+});
+
+test('unknown/prototype fields, HTML and oversized input stay outside profile fields', () => {
+  const input = JSON.parse(JSON.stringify(record()));
+  input.fields.push({ field: '__proto__', value: 'pollution', sourceId: 'registry' }, { field: 'constructor', value: 'pollution', sourceId: 'registry' });
+  input.fields[0].value = '<img onerror="alert(1)">회사명\u0000';
+  input.fields.push({ field: 'description', value: '가'.repeat(3000), sourceId: 'registry' });
+  const result = summarizeEnrichment(input);
+  assert.equal(result.profile.name, '회사명');
+  assert.equal(result.profile.description.length, 2000);
+  assert.deepEqual(Object.keys(result.profile).filter(key => !Object.hasOwn(ENRICHMENT_FIELDS, key)), []);
+  assert.equal({}.pollution, undefined);
+});
+
+test('invalid dates normalize to unknown, valid observations are idempotent and newer same-tier source wins', () => {
+  const input = record();
+  input.sources[0].publishedAt = '2026-02-31';
+  const first = normalizeEnrichment(input);
+  assert.equal(first.sources[0].publishedAt, null);
+  assert.deepEqual(normalizeEnrichment(first), first);
+  input.sources.push({ ...input.sources[0], id: 'registry-new', collectedAt: '2026-10-22T01:00:00Z' });
+  input.fields.push({ field: 'name', value: '변경상호', sourceId: 'registry-new' });
+  assert.equal(summarizeEnrichment(input).profile.name, '변경상호');
+});
+
+test('snapshot loading matches exact BRN, sends no credentials, and returns honest missing coverage', async () => {
+  let options;
+  const loaded = await loadEnrichment(BNO, { fetcher: async (_url, init) => { options = init; return json({ businesses: [record()], meta: { generatedAt: stamp, arbitrarySecret: 'hidden' } }); } });
+  assert.equal(options.credentials, 'omit');
+  assert.equal(loaded.summary.profile.name, '주식회사 테스트');
+  assert.equal(loaded.meta.arbitrarySecret, undefined);
+  const absent = await loadEnrichment('1048137225', { fetcher: async () => json({ businesses: [record()] }) });
+  assert.equal(absent.record, null);
+  assert.equal(absent.summary, null);
+  const notCollected = await loadEnrichment(BNO, { fetcher: async () => new Response('', { status: 404 }) });
+  assert.equal(notCollected.meta.status, 'not_collected');
+});
+
+test('bad input, duplicate BRNs, invalid JSON and oversized payloads do not silently pass', async () => {
+  await assert.rejects(loadEnrichment('invalid', { fetcher: () => { throw new Error('No request expected'); } }));
+  await assert.rejects(loadEnrichment(BNO, { fetcher: async () => json({ businesses: [record(), record()] }) }));
+  await assert.rejects(loadEnrichment(BNO, { fetcher: async () => new Response('not-json') }));
+  await assert.rejects(loadEnrichment(BNO, { fetcher: async () => new Response('{}', { headers: { 'content-length': '8000001' } }) }));
+  await assert.rejects(loadEnrichment(BNO, { fetcher: async () => new Response(' '.repeat(8_000_001)) }));
+});
+
+test('candidate discovery retains only a safe referring public URL',()=>{
+ const input=record();input.sources[2].discoveredFrom='https://company.example.com/about';
+ assert.equal(normalizeEnrichment(input).sources[2].discoveredFrom,input.sources[2].discoveredFrom);
+ input.sources[2].discoveredFrom='https://company.example.com/?token=secret';
+ assert.equal(normalizeEnrichment(input).sources[2].discoveredFrom,undefined);
+});
