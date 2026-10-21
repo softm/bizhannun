@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ENRICHMENT_FIELDS, safeEnrichmentUrl, normalizeEnrichment, summarizeEnrichment, loadEnrichment } from '../src/enrichment.mjs';
+import { ENRICHMENT_FIELDS, safeEnrichmentUrl, normalizeEnrichment, summarizeEnrichment, loadEnrichmentCatalog, loadEnrichment } from '../src/enrichment.mjs';
 const BNO = '2208162517';
 const stamp = '2026-10-21T13:00:00Z';
 const record = () => ({
@@ -122,6 +122,67 @@ test('bad input, duplicate BRNs, invalid JSON and oversized payloads do not sile
   await assert.rejects(loadEnrichment(BNO, { fetcher: async () => new Response('not-json') }));
   await assert.rejects(loadEnrichment(BNO, { fetcher: async () => new Response('{}', { headers: { 'content-length': '8000001' } }) }));
   await assert.rejects(loadEnrichment(BNO, { fetcher: async () => new Response(' '.repeat(8_000_001)) }));
+});
+
+test('catalog loading normalizes records, counts exclusions and whitelists metadata', async () => {
+  const first = record();
+  first.businessNumber = '220-81-62517';
+  const controller = new AbortController();
+  const requestedUrl = new URL('https://example.com/data/enrichment/index.json');
+  let actualUrl, options;
+  const loaded = await loadEnrichmentCatalog({
+    url: requestedUrl, signal: controller.signal,
+    fetcher: async (url, init) => {
+      actualUrl = url; options = init;
+      return json({ businesses: [null, first, { businessNumber: 'invalid' }], meta: {
+        status: 'partial', generatedAt: stamp, collectedAt: '2026-02-31', arbitrarySecret: 'hidden', loadedCount: 999,
+      } });
+    },
+  });
+  assert.equal(actualUrl, requestedUrl);
+  assert.equal(options.signal, controller.signal);
+  assert.equal(options.credentials, 'omit');
+  assert.equal(options.cache, 'no-cache');
+  assert.equal(loaded.records[0].businessNumber, BNO);
+  assert.equal(summarizeEnrichment(loaded.records[0]).profile.name, '주식회사 테스트');
+  assert.deepEqual(loaded.meta, {
+    status: 'partial', generatedAt: '2026-10-21T13:00:00.000Z', collectedAt: null,
+    loadedCount: 1, inputCount: 3, excludedCount: 2,
+  });
+});
+
+test('catalog distinguishes missing, empty, failed and malformed snapshots', async () => {
+  const missing = await loadEnrichmentCatalog({ fetcher: async () => new Response('', { status: 404 }) });
+  assert.deepEqual(missing.records, []);
+  assert.equal(missing.meta.status, 'not_collected');
+  assert.equal(missing.meta.excludedCount, 0);
+  const empty = await loadEnrichmentCatalog({ fetcher: async () => json({ businesses: [] }) });
+  assert.equal(empty.meta.status, 'available');
+  assert.equal(empty.meta.loadedCount, 0);
+  for (const malformed of [null, [], {}, { businesses: {} }]) {
+    await assert.rejects(loadEnrichmentCatalog({ fetcher: async () => json(malformed) }), /형식/);
+  }
+  await assert.rejects(loadEnrichmentCatalog({ fetcher: async () => new Response('', { status: 503 }) }), /불러오지/);
+});
+
+test('catalog rejects ambiguous identities and excessive records without silent truncation', async () => {
+  const duplicate = { ...record(), businessNumber: '220-81-62517' };
+  await assert.rejects(loadEnrichmentCatalog({ fetcher: async () => json({ businesses: [record(), duplicate] }) }), /중복/);
+  // The duplicate is not the requested number: exact-number detail still rejects an ambiguous catalog.
+  await assert.rejects(loadEnrichment('1048137225', { fetcher: async () => json({ businesses: [record(), duplicate] }) }), /중복/);
+  await assert.rejects(loadEnrichmentCatalog({ fetcher: async () => json({ businesses: Array(5001).fill(null) }) }), /허용 건수/);
+});
+
+test('catalog preserves HTTP cancellation and enforces streaming byte limits', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(loadEnrichmentCatalog({ signal: controller.signal, fetcher: async (_url, options) => {
+    options.signal.throwIfAborted();
+  } }), { name: 'AbortError' });
+  await assert.rejects(loadEnrichmentCatalog({ fetcher: async () => new Response('{}', {
+    headers: { 'content-length': '8000001' },
+  }) }), /허용 크기/);
+  await assert.rejects(loadEnrichmentCatalog({ fetcher: async () => new Response(' '.repeat(8_000_001)) }), /허용 크기/);
 });
 
 test('candidate discovery retains only a safe referring public URL',()=>{

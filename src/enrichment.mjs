@@ -16,6 +16,7 @@ const CHANNELS = new Set(['official_website', 'website', 'public_data', 'registr
 const SOURCE_PRIORITY = { public_data: 0, registry: 1, official_website: 2, website: 3, commerce: 4, jobs: 5, news: 6, social: 7, directory: 8, user_document: 9 };
 const MATCH_RANK = { exact_bno: 0, confirmed_domain: 1, candidate: 2 };
 const MAX_BYTES = 8_000_000;
+const MAX_RECORDS = 5000;
 const own = (value, key) => Object.hasOwn(value, key);
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const safeText = (value, limit = 200) => typeof value === 'string'
@@ -191,22 +192,39 @@ async function readBoundedJson(response) {
   } finally { reader.releaseLock(); }
 }
 
-/** Public snapshot lookup; a missing record is an honest coverage gap, not an empty company. */
-export async function loadEnrichment(bno, { fetcher = globalThis.fetch,
+/** Read the same bounded public snapshot for both name search and exact-number detail. */
+export async function loadEnrichmentCatalog({ fetcher = globalThis.fetch,
   url = new URL('../data/enrichment/index.json', import.meta.url), signal } = {}) {
-  const businessNumber = normalizeBusinessNumber(bno);
-  if (!isValidBusinessNumber(businessNumber)) throw new Error('올바른 사업자등록번호가 필요합니다.');
   const response = await fetcher(url, { cache: 'no-cache', credentials: 'omit', ...(signal ? { signal } : {}) });
-  if (response.status === 404) return { record: null, summary: null, meta: { status: 'not_collected', loadedCount: 0 } };
+  if (response.status === 404) return { records: [], meta: {
+    status: 'not_collected', loadedCount: 0, inputCount: 0, excludedCount: 0,
+    generatedAt: null, collectedAt: null,
+  } };
   if (!response.ok) throw new Error('사업자 보강 정보를 불러오지 못했습니다.');
   const data = await readBoundedJson(response);
   if (!object(data) || !Array.isArray(data.businesses)) throw new Error('사업자 보강 정보의 형식을 확인할 수 없습니다.');
-  const records = data.businesses.slice(0, 5000).map(normalizeEnrichment).filter(Boolean);
-  const matches = records.filter(record => record.businessNumber === businessNumber);
-  if (matches.length > 1) throw new Error('같은 사업자의 보강 기록이 중복되어 확인이 필요합니다.');
-  const record = matches[0] || null;
-  const meta = object(data.meta) ? { status: safeText(data.meta.status, 50) || 'available',
-    generatedAt: timestamp(data.meta.generatedAt), collectedAt: timestamp(data.meta.collectedAt),
-    loadedCount: records.length } : { status: 'available', loadedCount: records.length };
+  if (data.businesses.length > MAX_RECORDS) throw new Error('사업자 보강 정보가 허용 건수를 초과했습니다.');
+  const records = [], seen = new Set();
+  for (const input of data.businesses) {
+    const record = normalizeEnrichment(input);
+    if (!record) continue;
+    if (seen.has(record.businessNumber)) throw new Error('같은 사업자의 보강 기록이 중복되어 확인이 필요합니다.');
+    seen.add(record.businessNumber);
+    records.push(record);
+  }
+  const inputMeta = object(data.meta) ? data.meta : {};
+  const meta = { status: safeText(inputMeta.status, 50) || 'available',
+    generatedAt: timestamp(inputMeta.generatedAt), collectedAt: timestamp(inputMeta.collectedAt),
+    loadedCount: records.length, inputCount: data.businesses.length,
+    excludedCount: data.businesses.length - records.length };
+  return { records, meta };
+}
+
+/** Public snapshot lookup; a missing record is an honest coverage gap, not an empty company. */
+export async function loadEnrichment(bno, options = {}) {
+  const businessNumber = normalizeBusinessNumber(bno);
+  if (!isValidBusinessNumber(businessNumber)) throw new Error('올바른 사업자등록번호가 필요합니다.');
+  const { records, meta } = await loadEnrichmentCatalog(options);
+  const record = records.find(item => item.businessNumber === businessNumber) || null;
   return { record, summary: record ? summarizeEnrichment(record) : null, meta };
 }
