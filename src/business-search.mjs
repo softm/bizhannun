@@ -1,5 +1,6 @@
 import { isValidBusinessNumber, normalizeBusinessNumber } from './domain.mjs';
-import { summarizeEnrichment } from './enrichment.mjs';
+import { normalizeEnrichment } from './enrichment.mjs';
+import { attachPartnerEnrichment, normalizePartnerEnrichment, resolveBusinessProfile } from './business-profile.mjs';
 
 const MAX_QUERY_LENGTH = 200;
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -25,6 +26,13 @@ export function normalizeBusinessName(value) {
   return nameText(value).replace(/\s+/gu, '');
 }
 
+// A search already includes both ends; explicit surrounding wildcards mean the same thing.
+// Keep name normalization separate so literal names containing % or * remain intact.
+function queryText(value) {
+  const trimmed = displayText(value).normalize('NFKC').replace(/^[%*\s]+|[%*\s]+$/gu, '');
+  return nameText(trimmed).replace(/^[%*\s]+|[%*\s]+$/gu, '');
+}
+
 /** Auto-detect names/numbers; an explicit name mode supports purely numeric names. */
 export function classifyBusinessQuery(value, { type = 'auto' } = {}) {
   const raw = typeof value === 'string' ? value.normalize('NFKC').trim() : '';
@@ -40,7 +48,7 @@ export function classifyBusinessQuery(value, { type = 'auto' } = {}) {
       ? { kind: 'number', query, businessNumber }
       : { kind: 'invalid', query, error: '사업자등록번호 10자리와 검증번호를 확인해 주세요.' };
   }
-  if (!/[\p{L}\p{N}]/u.test(normalizeBusinessName(query))) {
+  if (!/[\p{L}\p{N}]/u.test(queryText(query))) {
     return { kind: 'invalid', query, error: '검색할 상호·업체명을 입력해 주세요.' };
   }
   return { kind: 'name', query };
@@ -57,68 +65,97 @@ function addLabel(entry, label) {
   if (!entry.sourceLabels.includes(label)) entry.sourceLabels.push(label);
 }
 
+function mergeSearchEvidence(previous, incoming, businessNumber) {
+  if (!incoming) return previous;
+  if (!previous) return incoming;
+  // Reuse the detail view's source-atomic merge, including identity-scope corrections.
+  return attachPartnerEnrichment({ businessNumber, enrichment: previous }, incoming).enrichment;
+}
+
+function containsNameObservation(record, field, source) {
+  return Boolean(record && field && source
+    && record.sources.some(item => item.id === source.id && item.url === source.url
+      && item.collectedAt === source.collectedAt && item.match !== 'candidate')
+    && record.fields.some(item => item.field === 'name' && item.value === field.value
+      && item.sourceId === source.id && item.match !== 'candidate'));
+}
+
 /**
  * Build a fresh, account-scoped index. Private partners/profile stay in memory;
  * there are no network calls, persisted caches, or promotion of candidate facts.
  */
 export function buildBusinessSearchIndex({ records = [], partners = [], profile = {} } = {}) {
   const byNumber = new Map();
-  const getEntry = value => {
+  const getGroup = value => {
     const businessNumber = canonicalNumber(value);
     if (!isValidBusinessNumber(businessNumber)) return null;
     if (!byNumber.has(businessNumber)) byNumber.set(businessNumber, {
-      businessNumber, name: '', aliases: [], address: '', industry: '', sourceLabels: [],
-      sourceUrl: '', sourceTitle: '', collectedAt: null,
-      fromPublic: false, fromSaved: false, fromProfile: false,
+      businessNumber, publicRecord: null, saved: [],
     });
     return byNumber.get(businessNumber);
   };
-  for (const record of Array.isArray(records) ? records : []) {
-    const summary = summarizeEnrichment(record);
-    if (!summary) continue;
-    const nameField = summary.fields.find(field => field.field === 'name');
-    // A configured seed name, search snippet, or candidate is not an identified business name.
-    if (!nameField || !normalizeBusinessName(nameField.value)) continue;
-    const entry = getEntry(summary.businessNumber);
-    if (!entry) continue;
-    const source = summary.sources.find(value => value.id === nameField.sourceId);
-    const collectedAt = source?.collectedAt || summary.collectedAt || null;
-    const newer = !entry.fromPublic || (collectedAt || '') > (entry.collectedAt || '');
-    addAlias(entry, nameField.value);
-    for (const alternative of nameField.alternatives || []) addAlias(entry, alternative.value);
-    if (newer) {
-      entry.name = displayText(nameField.value);
-      entry.address = displayText(summary.profile.address, 500);
-      entry.industry = displayText(summary.profile.industry || summary.profile.businessCategory || summary.profile.businessType, 500);
-      entry.sourceUrl = source?.url || '';
-      entry.sourceTitle = source?.title || '';
-      entry.collectedAt = collectedAt;
-    }
-    entry.fromPublic = true;
-    addLabel(entry, '공개 수집 자료');
+  for (const input of Array.isArray(records) ? records : []) {
+    const record = normalizeEnrichment(input);
+    if (!record) continue;
+    const group = getGroup(record.businessNumber);
+    group.publicRecord = mergeSearchEvidence(group.publicRecord, record, group.businessNumber);
   }
   for (const partner of Array.isArray(partners) ? partners : []) {
-    if (!isObject(partner) || !normalizeBusinessName(partner.name)) continue;
-    const entry = getEntry(partner.businessNumber);
-    if (!entry) continue;
-    addAlias(entry, partner.name);
-    entry.fromSaved = true;
-    addLabel(entry, '내 거래처');
-    if (!entry.address) entry.address = displayText(partner.address, 500);
-    if (!entry.industry) entry.industry = displayText(partner.industry, 500);
+    if (!isObject(partner)) continue;
+    getGroup(partner.businessNumber)?.saved.push({ partner, role: 'partner' });
   }
-  if (isObject(profile) && normalizeBusinessName(profile.name)) {
-    const entry = getEntry(profile.businessNumber);
-    if (entry) {
-      addAlias(entry, profile.name);
-      entry.fromProfile = true;
-      addLabel(entry, '내 사업 프로필');
-      if (!entry.address) entry.address = displayText(profile.address || profile.region, 500);
-      if (!entry.industry) entry.industry = displayText(profile.industry, 500);
+  if (isObject(profile)) getGroup(profile.businessNumber)?.saved.push({ partner: profile, role: 'profile' });
+
+  const entries = [];
+  for (const { businessNumber, publicRecord, saved } of byNumber.values()) {
+    const savedRecords = [];
+    let linkedRecord = null;
+    for (const { partner } of saved) {
+      if (partner.enrichment == null) continue;
+      try {
+        const record = normalizePartnerEnrichment(partner.enrichment, businessNumber);
+        savedRecords.push(record);
+        linkedRecord = mergeSearchEvidence(linkedRecord, record, businessNumber);
+      } catch { /* A malformed or different-number snapshot cannot supply search facts. */ }
     }
+    linkedRecord = mergeSearchEvidence(linkedRecord, publicRecord, businessNumber);
+    const linked = resolveBusinessProfile({ businessNumber, record: linkedRecord });
+    const catalog = publicRecord ? resolveBusinessProfile({ businessNumber, record: publicRecord }) : null;
+    const summary = linked.summary;
+    const nameField = summary?.fields.find(field => field.field === 'name');
+    const source = nameField && summary.sources.find(item => item.id === nameField.sourceId);
+    const entry = {
+      businessNumber, name: '', aliases: [],
+      address: displayText(summary?.profile.address, 500),
+      industry: displayText(summary?.profile.industry || summary?.profile.businessCategory || summary?.profile.businessType, 500),
+      sourceLabels: [], sourceUrl: source?.url || '', sourceTitle: source?.title || '',
+      collectedAt: source?.collectedAt || summary?.collectedAt || null,
+      fromPublic: Boolean(catalog?.publicName && normalizeBusinessName(catalog.publicName)),
+      fromSaved: false, fromProfile: false,
+      fromSavedEvidence: !containsNameObservation(publicRecord, nameField, source)
+        && savedRecords.some(record => containsNameObservation(record, nameField, source)),
+    };
+    // Only the final canonical observations enter the index, never seeds or revoked aliases.
+    if (nameField) {
+      addAlias(entry, nameField.value);
+      for (const alternative of nameField.alternatives || []) addAlias(entry, alternative.value);
+    }
+    if (entry.fromPublic) addLabel(entry, '공개 수집 자료');
+    for (const { partner, role } of saved) {
+      const projected = resolveBusinessProfile({ businessNumber,
+        partner: { ...partner, businessNumber }, record: linkedRecord });
+      // Invalid imported evidence must not turn an untouched automatic label into a user alias.
+      const automaticName = partner.nameOrigin?.kind === 'public' && partner.name === partner.nameOrigin.value;
+      if (!automaticName) addAlias(entry, projected.userName);
+      if (role === 'partner') { entry.fromSaved = true; addLabel(entry, '내 거래처'); }
+      else { entry.fromProfile = true; addLabel(entry, '내 사업 프로필'); }
+      if (!entry.address) entry.address = displayText(partner.address || (role === 'profile' ? partner.region : ''), 500);
+      if (!entry.industry) entry.industry = displayText(partner.industry, 500);
+    }
+    if (entry.fromSavedEvidence) addLabel(entry, '저장한 공개자료');
+    if (entry.aliases.length) entries.push(entry);
   }
-  const entries = [...byNumber.values()].filter(entry => entry.aliases.length)
-    .sort((a, b) => a.name.localeCompare(b.name, 'ko') || a.businessNumber.localeCompare(b.businessNumber));
+  entries.sort((a, b) => a.name.localeCompare(b.name, 'ko') || a.businessNumber.localeCompare(b.businessNumber));
   return {
     entries,
     publicCount: entries.filter(entry => entry.fromPublic).length,
@@ -127,16 +164,35 @@ export function buildBusinessSearchIndex({ records = [], partners = [], profile 
   };
 }
 
-function matchEntry(entry, query, tokens) {
+function patternParts(value) {
+  return value.split(/[%*]+/u).filter(Boolean);
+}
+
+/** Match ordered literal pieces with monotonically advancing cursors; never compile user regex. */
+function patternStart(text, parts) {
+  if (!parts.length) return -1;
+  let cursor = 0, start = -1;
+  for (const part of parts) {
+    const found = text.indexOf(part, cursor);
+    if (found < 0) return -1;
+    if (start < 0) start = found;
+    cursor = found + part.length;
+  }
+  return start;
+}
+
+function matchEntry(entry, parts, tokens) {
   const location = displayText(entry.address, 500).normalize('NFKC').toLocaleLowerCase('ko').replace(/\s+/gu, '');
+  const literal = parts.join('');
   let best = null;
   for (const alias of entry.aliases || []) {
     const name = normalizeBusinessName(alias);
     if (!name) continue;
-    let rank = name === query ? 0 : name.startsWith(query) ? 1 : name.includes(query) ? 2 : null;
+    const start = patternStart(name, parts);
+    let rank = start < 0 ? null : name === literal ? 0 : start === 0 ? 1 : 2;
     if (rank === null && tokens.length > 1
-      && tokens.some(token => name.includes(token))
-      && tokens.every(token => name.includes(token) || location.includes(token))) rank = 3;
+      && tokens.some(token => patternStart(name, token) >= 0)
+      && tokens.every(token => patternStart(name, token) >= 0 || patternStart(location, token) >= 0)) rank = 3;
     if (rank !== null && (best === null || rank < best.rank)) best = { rank, matchedName: alias };
   }
   return best;
@@ -146,13 +202,14 @@ function matchEntry(entry, query, tokens) {
 export function searchBusinesses(index, value, { limit = 20, offset = 0 } = {}) {
   const pageLimit = Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, 100) : 20;
   const pageOffset = Number.isSafeInteger(offset) && offset >= 0 ? offset : 0;
-  const normalized = nameText(value), query = normalized.replace(/\s+/gu, '');
+  const normalized = queryText(value), query = normalized.replace(/\s+/gu, '');
   const empty = { results: [], total: 0, offset: pageOffset, limit: pageLimit };
   if (!query || !/[\p{L}\p{N}]/u.test(query) || typeof value !== 'string' || value.length > MAX_QUERY_LENGTH) return empty;
-  const tokens = normalized.split(' ').filter(Boolean);
+  const parts = patternParts(query);
+  const tokens = normalized.split(' ').filter(Boolean).map(patternParts).filter(parts => parts.length);
   const matches = [];
   for (const entry of Array.isArray(index?.entries) ? index.entries : []) {
-    const match = matchEntry(entry, query, tokens);
+    const match = matchEntry(entry, parts, tokens);
     if (match) matches.push({ entry, ...match });
   }
   matches.sort((a, b) => a.rank - b.rank || a.entry.name.localeCompare(b.entry.name, 'ko')

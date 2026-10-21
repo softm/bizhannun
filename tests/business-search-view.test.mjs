@@ -28,6 +28,8 @@ test('name results show public and private coverage without implying a nationwid
 test('no matches and failed public loading have distinct actionable explanations', () => {
   const empty = render();
   assert.match(empty, /수집·저장된 자료에서 찾지 못했습니다/);
+  assert.match(empty, /현재 불러온 검색 대상 4곳에서 일치하는 이름이 없습니다/);
+  assert.match(empty, /전국 상호 전체를 조회한 결과는 아닙니다/);
   assert.match(empty, /업체가 없거나 폐업했다는 뜻은 아닙니다/);
   assert.match(empty, /data-action="search-by-number"/);
   assert.match(empty, /data-action="add-partner-from-search"/);
@@ -116,4 +118,21 @@ test('pagination exposes total pages and disables only the relevant boundary con
   assert.doesNotMatch(last, /data-action="name-search-prev" disabled/);
   assert.match(last, /data-action="name-search-next" disabled/);
   assert.doesNotMatch(render({ result: { results: [company()], total: 1, offset: 0, limit: 10 } }), /name-search-pagination/);
+});
+
+test('saved evidence keeps its source timestamp without inflating public coverage', () => {
+  const html = render({ result: { results: [company({ fromPublic: false, fromSavedEvidence: true,
+    sourceLabels: ['내 거래처', '저장한 공개자료'] })], total: 1, offset: 0, limit: 10 },
+    index: { publicCount: 0, savedCount: 1, totalCount: 1 } });
+  assert.match(html, /공개자료 0곳/);
+  assert.match(html, /내 저장정보 1곳/);
+  assert.match(html, /저장한 공개자료/);
+  assert.match(html, /자료 수집 2026/);
+  assert.match(html, /상호 출처/);
+});
+
+test('external fallback turns search wildcards into words and retains URL escaping', () => {
+  const html = render({ query: '%서해*전문점%' });
+  const href = html.match(/href="(https:\/\/search\.naver\.com\/search\.naver\?query=[^"]+)"/)?.[1];
+  assert.equal(new URL(href).searchParams.get('query'), '서해 전문점 사업자등록번호');
 });

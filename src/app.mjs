@@ -419,6 +419,7 @@ function lookupView() {
   const showResults=!selectedContext||ui.nameResultsExpanded;
   const search=ui.nameQuery?currentNameSearch():null;
   const index=businessSearchIndex();
+  const searchScope=!publicIndexLoaded&&!publicIndexError?'공개목록 불러오는 중':publicIndexError?'공개목록 연결 확인 필요':`수집·저장 ${number(index.totalCount)}곳 대상`;
   return `<div class="lookup-page">
     <header class="lookup-heading"><h1>사업자 조회</h1><p>이름이나 등록번호로 찾고, 같은 번호의 정보를 확인하세요.</p></header>
     <section class="card lookup-search" aria-label="사업자 이름 또는 등록번호 조회">
@@ -432,7 +433,7 @@ function lookupView() {
         </div>
         <div id="lookup-error" class="field-error" role="alert">${esc(ui.lookupError)}</div>
       </form>
-      <div class="lookup-search-note"><p id="lookup-hint">이름 검색은 현재 수집·저장된 자료에서 찾습니다.</p><details class="lookup-scope" id="lookup-scope-info"><summary>검색 범위·갱신</summary><div><p>공개자료 ${number(index.publicCount)}곳 · 내 저장정보 ${number(index.savedCount)}곳. 같은 사업자번호를 합친 검색 대상은 ${number(index.totalCount)}곳입니다.</p><p>전국 모든 사업자의 상호가 수집된 것은 아닙니다. 상호 일부와 지역을 함께 입력할 수 있고, 번호는 하이픈 없이 입력해도 됩니다.</p><div class="search-data-highlights"><span>공개자료 수집 일정<strong>매일 06:17 (한국시간)</strong></span><span>공개 목록 생성<strong>${esc(fmtTime(publicMeta.generatedAt||publicMeta.collectedAt))}</strong></span></div><a class="text-button" href="./#data" data-nav="data">전체 데이터 현황 ${icon('chevron')}</a></div></details></div>
+      <div class="lookup-search-note"><p id="lookup-hint">이름 일부 포함 검색 · <strong>${esc(searchScope)}</strong></p><details class="lookup-scope" id="lookup-scope-info"><summary>검색 범위·갱신</summary><div><p>공개자료 ${number(index.publicCount)}곳 · 내 저장정보 ${number(index.savedCount)}곳. 같은 사업자번호를 합친 검색 대상은 ${number(index.totalCount)}곳입니다.</p><p>전국 모든 사업자의 상호가 수집된 것은 아닙니다. 이름의 앞·중간·끝 어디에 검색어가 포함되어도 찾습니다. 저장된 별칭과 동일 사업자번호로 확인된 공개 상호도 검색합니다.</p><p>예: <strong>이버</strong> → 네이버, <strong>박속</strong> → 서해박속낙지전문점. <strong>%네이버%</strong>·<strong>*네이버*</strong>도 지원하며, <strong>서해%전문점</strong>처럼 중간 글자를 생략할 수 있습니다.</p><p>상호 일부와 지역을 함께 입력할 수 있고, 번호는 하이픈 없이 입력해도 됩니다. 숫자만으로 된 상호는 검색 기준을 상호·업체명으로 바꿔 주세요. 초성·오타 보정은 지원하지 않습니다.</p><div class="search-data-highlights"><span>공개자료 수집 일정<strong>매일 06:17 (한국시간)</strong></span><span>공개 목록 생성<strong>${esc(fmtTime(publicMeta.generatedAt||publicMeta.collectedAt))}</strong></span></div><a class="text-button" href="./#data" data-nav="data">전체 데이터 현황 ${icon('chevron')}</a></div></details></div>
     </section>
     ${selectedContext?`<div id="lookup-search-context" class="lookup-results-context"><span><strong>“${esc(ui.nameQuery)}”</strong> 검색 결과 ${number(search.result.total)}곳</span><button id="toggle-name-results" class="text-button" data-action="toggle-name-results" aria-controls="lookup-name-results-area" aria-expanded="${showResults}">${showResults?'결과 목록 접기':'결과 다시 보기'} ${icon('chevron')}</button></div>`:''}
     ${ui.nameQuery?`<div id="lookup-name-results-area" class="lookup-results ${showResults?'is-expanded':''}" ${showResults?'':'hidden'}>${showResults?nameSearchView():''}</div>`:''}
