@@ -7,7 +7,38 @@
         {
           "id": "reviewed-bizno-6901100416",
           "url": "https://bizno.net/article/6901100416",
-          "title": "비즈노 · 서해박속낙지전문점 공개 사업자정보",
+          "title": "서해박속낙지전문점",
+          "channel": "directory",
+          "collectedAt": "2026-10-21T15:25:22.149Z",
+          "publishedAt": null,
+          "match": "exact_bno",
+          "scope": null,
+          "businessNumber": "6901100416"
+        },
+        {
+          "id": "740654ff81027eb9d42c046a",
+          "url": "https://korean.visitkorea.or.kr/detail/ms_detail.do?cotid=270b6eaa-db08-47a6-8ae0-ba30b9abd507",
+          "title": "서해박속낙지전문점> 여행지 :대한민국 구석구석",
+          "channel": "website",
+          "collectedAt": "2026-10-21T15:25:22.149Z",
+          "publishedAt": null,
+          "match": "candidate",
+          "scope": null
+        },
+        {
+          "id": "b7d188fe559497597093029a",
+          "url": "https://blog.naver.com/totanns/223457807589",
+          "title": "공가리의 일상 : 네이버 블로그",
+          "channel": "website",
+          "collectedAt": "2026-10-21T15:25:22.149Z",
+          "publishedAt": null,
+          "match": "candidate",
+          "scope": null
+        },
+        {
+          "id": "historical-reviewed-a90449afcc2293c4e8cfc386",
+          "url": "https://bizno.net/article/6901100416",
+          "title": "비즈노 · 서해박속낙지전문점 공개 사업자정보 · 이전 검토 기록",
           "channel": "directory",
           "collectedAt": "2026-10-21T13:22:53.376Z",
           "publishedAt": null,
@@ -38,18 +69,16 @@
       ],
       "fields": [
         {
-          "field": "name",
-          "value": "서해박속낙지전문점",
+          "field": "businessType",
+          "value": "숙박 및 음식점업",
           "sourceId": "reviewed-bizno-6901100416",
-          "match": "exact_bno",
-          "scope": "public_business"
+          "match": "exact_bno"
         },
         {
-          "field": "address",
-          "value": "경기도 광명시 오리로 1034-1(광명동)",
+          "field": "businessCategory",
+          "value": "일반한식",
           "sourceId": "reviewed-bizno-6901100416",
-          "match": "exact_bno",
-          "scope": "public_business"
+          "match": "exact_bno"
         },
         {
           "field": "phone",
@@ -59,39 +88,43 @@
           "scope": "public_business"
         },
         {
-          "field": "businessType",
-          "value": "숙박 및 음식점업",
+          "field": "address",
+          "value": "경기도 광명시 오리로 1034-1(광명동) 경기도 광명시 광명동 159-42번지",
           "sourceId": "reviewed-bizno-6901100416",
-          "match": "exact_bno",
-          "scope": "public_business"
+          "match": "exact_bno"
         },
         {
-          "field": "businessCategory",
-          "value": "일반한식",
+          "field": "name",
+          "value": "서해박속낙지전문점",
           "sourceId": "reviewed-bizno-6901100416",
-          "match": "exact_bno",
-          "scope": "public_business"
+          "match": "exact_bno"
+        },
+        {
+          "field": "description",
+          "value": "서해박속낙지전문점은 경기 광명시 광명동에 위치한 낙지요리 전문점이다. 국산 낙지와 충청남도 서산 농장에서 직접 재배한 박으로 최고의 스테미너식 박속낙지탕(연포탕)을 요리한다. 낙지먹물 볶음밥과 칼국수도 함께 즐길 수 있으며 어리굴젓비빔밥도 맛볼 수 있다. 또한, 이곳의 모든 식재료는 국산이라 믿고 먹을 수 있다. 가족외식추천|광명맛집|광명회식장소|낙지요리전문점|박속낙지|박속낙지탕|서해박속낙지전문점|음식",
+          "sourceId": "740654ff81027eb9d42c046a",
+          "match": "candidate"
         },
         {
           "field": "industry",
           "value": "한식 일반 음식점업",
-          "sourceId": "reviewed-bizno-6901100416",
+          "sourceId": "historical-reviewed-a90449afcc2293c4e8cfc386",
           "match": "exact_bno",
           "scope": "public_business"
         }
       ],
-      "collectedAt": "2026-10-21T13:22:53.376Z",
+      "collectedAt": "2026-10-21T15:25:22.149Z",
       "collection": {
-        "status": "failed",
-        "lastAttemptAt": "2026-10-21T14:42:45.325Z",
-        "lastSuccessAt": "2026-10-21T13:22:53.376Z",
+        "status": "partial",
+        "lastAttemptAt": "2026-10-21T15:25:22.149Z",
+        "lastSuccessAt": "2026-10-21T15:25:22.149Z",
         "sourceStatuses": [
           {
             "provider": "comwel",
             "insuranceType": "1",
             "label": "산재보험",
             "sourceUrl": "https://www.data.go.kr/data/15059256/openapi.do",
-            "checkedAt": "2026-10-21T14:42:52.012Z",
+            "checkedAt": "2026-10-21T15:25:32.570Z",
             "status": "error",
             "pages": 0,
             "returnedCount": 0,
@@ -106,7 +139,7 @@
             "insuranceType": "2",
             "label": "고용보험",
             "sourceUrl": "https://www.data.go.kr/data/15059256/openapi.do",
-            "checkedAt": "2026-10-21T14:42:52.012Z",
+            "checkedAt": "2026-10-21T15:25:32.570Z",
             "status": "error",
             "pages": 0,
             "returnedCount": 0,
@@ -121,7 +154,7 @@
             "insuranceType": "",
             "label": "공정위 통신판매업",
             "sourceUrl": "https://www.data.go.kr/data/15126315/openapi.do",
-            "checkedAt": "2026-10-21T14:42:53.652Z",
+            "checkedAt": "2026-10-21T15:25:33.907Z",
             "status": "not_configured",
             "pages": 0,
             "returnedCount": 0,
@@ -130,9 +163,165 @@
             "truncated": false,
             "errorCode": "not_configured",
             "message": "공정위 통신판매 API 인증키가 설정되지 않았습니다."
+          },
+          {
+            "provider": "web_page",
+            "insuranceType": "",
+            "label": "서해박속낙지전문점",
+            "sourceUrl": "https://bizno.net/article/6901100416",
+            "checkedAt": "2026-10-21T15:25:22.149Z",
+            "status": "success",
+            "pages": 1,
+            "returnedCount": 5,
+            "matchedCount": 5,
+            "totalCount": null,
+            "truncated": false
+          },
+          {
+            "provider": "web_page",
+            "insuranceType": "",
+            "label": "서해박속낙지전문점> 여행지 :대한민국 구석구석",
+            "sourceUrl": "https://korean.visitkorea.or.kr/detail/ms_detail.do?cotid=270b6eaa-db08-47a6-8ae0-ba30b9abd507",
+            "checkedAt": "2026-10-21T15:25:22.149Z",
+            "status": "identity_mismatch",
+            "pages": 1,
+            "returnedCount": 1,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "공개 페이지를 읽었지만 동일 사업자인지 확인되지 않아 후보로 보관합니다."
+          },
+          {
+            "provider": "web_page",
+            "insuranceType": "",
+            "label": "www.instagram.com 공개 페이지",
+            "sourceUrl": "https://www.instagram.com/octobaksok/",
+            "checkedAt": "2026-10-21T15:25:22.149Z",
+            "status": "error",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "errorCode": "robots_unavailable",
+            "message": "수집 허용 정책을 확인하지 못했습니다."
+          },
+          {
+            "provider": "web_page",
+            "insuranceType": "",
+            "label": "공가리의 일상 : 네이버 블로그",
+            "sourceUrl": "https://blog.naver.com/totanns/223457807589",
+            "checkedAt": "2026-10-21T15:25:22.149Z",
+            "status": "identity_mismatch",
+            "pages": 1,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "공개 페이지를 읽었지만 동일 사업자인지 확인되지 않아 후보로 보관합니다."
+          },
+          {
+            "provider": "web_search",
+            "insuranceType": "",
+            "label": "공개 웹 검색 RSS 후보",
+            "sourceUrl": "https://www.bing.com/search?format=rss&q=%226901100416%22",
+            "checkedAt": "2026-10-21T15:25:22.149Z",
+            "status": "error",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "errorCode": "robots_disallowed",
+            "message": "원본 사이트의 수집 허용 범위 밖입니다."
+          },
+          {
+            "provider": "fsc",
+            "insuranceType": "",
+            "label": "금융위 기업개황",
+            "sourceUrl": "https://www.data.go.kr/data/15043184/openapi.do",
+            "checkedAt": "2026-10-21T15:25:33.908Z",
+            "status": "error",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "errorCode": "not_authorized",
+            "message": "해당 채널의 인증키·API 활용승인을 확인해야 합니다."
+          },
+          {
+            "provider": "dart",
+            "insuranceType": "",
+            "label": "DART 기업개황",
+            "sourceUrl": "https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS001&apiId=2019002",
+            "checkedAt": "2026-10-21T15:25:33.908Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "DART API 인증키가 필요합니다."
+          },
+          {
+            "provider": "naver_news",
+            "insuranceType": "",
+            "label": "네이버 뉴스",
+            "sourceUrl": "https://developers.naver.com/docs/serviceapi/search/news/news.md",
+            "checkedAt": "2026-10-21T15:25:33.908Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "네이버 검색 API Client ID·Secret이 필요합니다."
+          },
+          {
+            "provider": "naver_blog",
+            "insuranceType": "",
+            "label": "네이버 블로그",
+            "sourceUrl": "https://developers.naver.com/docs/serviceapi/search/blog/blog.md",
+            "checkedAt": "2026-10-21T15:25:33.908Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "네이버 검색 API Client ID·Secret이 필요합니다."
+          },
+          {
+            "provider": "naver_local",
+            "insuranceType": "",
+            "label": "네이버 지역",
+            "sourceUrl": "https://developers.naver.com/docs/serviceapi/search/local/local.md",
+            "checkedAt": "2026-10-21T15:25:33.908Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "네이버 검색 API Client ID·Secret이 필요합니다."
+          },
+          {
+            "provider": "kakao_local",
+            "insuranceType": "",
+            "label": "카카오 장소",
+            "sourceUrl": "https://developers.kakao.com/docs/latest/ko/local/dev-guide",
+            "checkedAt": "2026-10-21T15:25:33.908Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "카카오 REST API 키가 필요합니다."
           }
         ],
-        "error": "unsupported_encoding"
+        "error": "robots_unavailable"
       },
       "bno": "6901100416",
       "entityType": "business",
@@ -141,7 +330,7 @@
     {
       "businessNumber": "2208162517",
       "name": "네이버",
-      "collectedAt": "2026-10-21T14:42:46.004Z",
+      "collectedAt": "2026-10-21T15:25:27.257Z",
       "officialDomain": "navercorp.com",
       "website": "https://www.navercorp.com",
       "sources": [
@@ -150,62 +339,62 @@
           "url": "https://www.navercorp.com/media/pressReleases",
           "title": "미디어",
           "channel": "news",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
-          "discoveredFrom": "https://www.navercorp.com/company/history"
+          "discoveredFrom": "https://www.navercorp.com/service/featuredServices"
         },
         {
           "id": "14abf22c8e85931dfbd1ab84",
           "url": "https://www.navercorp.com/media/mediaEvents",
           "title": "미디어 행사",
           "channel": "news",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
-          "discoveredFrom": "https://www.navercorp.com/company/history"
+          "discoveredFrom": "https://www.navercorp.com/service/featuredServices"
         },
         {
           "id": "e448684b874680370199e024",
           "url": "https://www.navercorp.com/media/naverReports",
           "title": "네이버 리포트",
           "channel": "news",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
-          "discoveredFrom": "https://www.navercorp.com/company/history"
+          "discoveredFrom": "https://www.navercorp.com/service/featuredServices"
         },
         {
           "id": "6341694207078d68df9ff1fc",
           "url": "https://www.navercorp.com/media/aiInNaver",
           "title": "AI in NAVER",
           "channel": "news",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
-          "discoveredFrom": "https://www.navercorp.com/company/history"
+          "discoveredFrom": "https://www.navercorp.com/service/featuredServices"
         },
         {
           "id": "3c54100b4a7d1ecdb52b5dd0",
           "url": "https://recruit.navercorp.com/",
           "title": "채용",
           "channel": "jobs",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
-          "discoveredFrom": "https://www.navercorp.com/company/history"
+          "discoveredFrom": "https://www.navercorp.com/service/featuredServices"
         },
         {
           "id": "88fb9e6115fe9eb691e746f3",
           "url": "https://www.navercorp.com/media/pressReleasesDetail?seq=10034767",
           "title": "보도자료 2026.10.19 네이버, 로컬 사업자 AX 지원 이어간다… 목포·광주서 ‘로컬그로스’ 진행",
           "channel": "news",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
@@ -216,7 +405,7 @@
           "url": "https://www.navercorp.com/media/pressReleasesDetail?seq=10034765",
           "title": "보도자료 2026.10.19 “한국에서 뭘 사고, 어디 갈까?”… 네이버 파파고, ‘Trend(트렌드)’로 한국 여행 길잡이 된다",
           "channel": "news",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
@@ -227,7 +416,7 @@
           "url": "https://www.navercorp.com/media/pressReleasesDetail?seq=10034768",
           "title": "보도자료 2026.10.19 네이버클라우드, ‘보안 자가진단’ 사이트 오픈… “AI 시대 기업 보안, 진단부터 개선 방향을 한 번에”",
           "channel": "news",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
@@ -238,7 +427,7 @@
           "url": "https://navercorp.com/media/naverReportsDetail?seq=10034695",
           "title": "네이버 리포트 2026.09.30 네이버 스마트스토어, 판매자와 함께 걸어온 10년의 기록",
           "channel": "news",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
@@ -249,7 +438,7 @@
           "url": "https://www.navercorp.com/media/pressReleasesDetail?seq=10034777",
           "title": "보도자료 2026.10.21 네이버웍스, 국내 협업툴 모바일 이용 '독주'…2위 대비 사용자·사용시간 2배 이상 격차 네이버웍스",
           "channel": "news",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
@@ -260,7 +449,7 @@
           "url": "https://www.navercorp.com/media/pressReleasesDetail?seq=10034775",
           "title": "보도자료 2026.10.21 네이버 D2SF, 온디바이스 AI 스타트업 ‘트레이스위브’에 신규 투자 네이버",
           "channel": "news",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
@@ -271,7 +460,7 @@
           "url": "https://www.navercorp.com/media/pressReleasesDetail?seq=10034760",
           "title": "보도자료 2026.10.16 네이버페이(Npay), 제주특별자치도・제주은행・제주신용보증재단과 업무협약 체결…제주 소상공인 금융・디지털 성장기반 확대 협력",
           "channel": "news",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
@@ -282,40 +471,70 @@
           "url": "https://blog.naver.com/naver_diary",
           "title": "blog link",
           "channel": "social",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
-          "discoveredFrom": "https://www.navercorp.com/company/history"
+          "discoveredFrom": "https://www.navercorp.com/service/featuredServices"
         },
         {
           "id": "63b0143f471b98892b35602a",
           "url": "https://www.instagram.com/naver_official/",
           "title": "instagram link",
           "channel": "social",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
-          "discoveredFrom": "https://www.navercorp.com/company/history"
+          "discoveredFrom": "https://www.navercorp.com/service/featuredServices"
         },
         {
           "id": "226f35115cde261713f1ba95",
           "url": "https://www.youtube.com/@naverofficial",
           "title": "youtube link",
           "channel": "social",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
           "publishedAt": null,
           "match": "candidate",
           "scope": null,
-          "discoveredFrom": "https://www.navercorp.com/company/history"
+          "discoveredFrom": "https://www.navercorp.com/service/featuredServices"
         },
         {
           "id": "32c202fee3e296b9bdb538e6",
           "url": "https://www.navercorp.com/main",
           "title": "NAVER Corp.",
           "channel": "website",
-          "collectedAt": "2026-10-21T14:42:46.004Z",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
+          "publishedAt": null,
+          "match": "confirmed_domain",
+          "scope": null
+        },
+        {
+          "id": "82dd212287d834e1ad65777f",
+          "url": "https://www.navercorp.com/company/contact",
+          "title": "Contact l NAVER Corp.",
+          "channel": "website",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
+          "publishedAt": null,
+          "match": "confirmed_domain",
+          "scope": null
+        },
+        {
+          "id": "95b30bfa159f55ffde412eda",
+          "url": "https://www.navercorp.com/service/featuredServices",
+          "title": "네이버 주요 서비스 l NAVER Corp.",
+          "channel": "website",
+          "collectedAt": "2026-10-21T15:25:27.257Z",
+          "publishedAt": null,
+          "match": "confirmed_domain",
+          "scope": null
+        },
+        {
+          "id": "historical-reviewed-1d4cffc9b1033967898180e6",
+          "url": "https://www.navercorp.com/main",
+          "title": "NAVER 공식 기업 홈페이지 · 이전 검토 기록",
+          "channel": "official_website",
+          "collectedAt": "2026-10-21T13:22:53.376Z",
           "publishedAt": null,
           "match": "confirmed_domain",
           "scope": null
@@ -349,36 +568,6 @@
           "publishedAt": null,
           "match": "confirmed_domain",
           "scope": null
-        },
-        {
-          "id": "reviewed-navercorp-home",
-          "url": "https://www.navercorp.com/main",
-          "title": "NAVER 공식 기업 홈페이지",
-          "channel": "official_website",
-          "collectedAt": "2026-10-21T13:22:53.376Z",
-          "publishedAt": null,
-          "match": "confirmed_domain",
-          "scope": null
-        },
-        {
-          "id": "candidate-naver-recruit",
-          "url": "https://recruit.navercorp.com/",
-          "title": "NAVER 채용 · 공식 홈페이지에 연결된 링크",
-          "channel": "jobs",
-          "collectedAt": "2026-10-21T13:22:53.376Z",
-          "publishedAt": null,
-          "match": "candidate",
-          "scope": null
-        },
-        {
-          "id": "candidate-naver-news",
-          "url": "https://www.navercorp.com/media/pressReleases",
-          "title": "NAVER 보도자료 · 공식 홈페이지에 연결된 링크",
-          "channel": "news",
-          "collectedAt": "2026-10-21T13:22:53.376Z",
-          "publishedAt": null,
-          "match": "candidate",
-          "scope": null
         }
       ],
       "fields": [
@@ -386,6 +575,43 @@
           "field": "description",
           "value": "네이버는 서비스, 기술, 지속가능성, 파트너십을 통해 사람과 기술을 연결합니다.",
           "sourceId": "32c202fee3e296b9bdb538e6",
+          "match": "confirmed_domain"
+        },
+        {
+          "field": "description",
+          "value": "네이버 문의 안내입니다.",
+          "sourceId": "82dd212287d834e1ad65777f",
+          "match": "confirmed_domain"
+        },
+        {
+          "field": "phone",
+          "value": "1588-3830",
+          "sourceId": "82dd212287d834e1ad65777f",
+          "match": "confirmed_domain",
+          "scope": "public_business"
+        },
+        {
+          "field": "description",
+          "value": "검색, 광고, 콘텐츠, 커머스 등 네이버의 서비스에 영역별로 특화된 AI 원천기술을 도입합니다.",
+          "sourceId": "95b30bfa159f55ffde412eda",
+          "match": "confirmed_domain"
+        },
+        {
+          "field": "website",
+          "value": "https://www.navercorp.com/",
+          "sourceId": "32c202fee3e296b9bdb538e6",
+          "match": "confirmed_domain"
+        },
+        {
+          "field": "name",
+          "value": "네이버",
+          "sourceId": "historical-reviewed-1d4cffc9b1033967898180e6",
+          "match": "confirmed_domain"
+        },
+        {
+          "field": "products",
+          "value": "검색, 광고, 커머스, 클라우드, 핀테크, 콘텐츠, 지도 서비스",
+          "sourceId": "historical-reviewed-1d4cffc9b1033967898180e6",
           "match": "confirmed_domain"
         },
         {
@@ -405,49 +631,19 @@
           "value": "네이버 연혁입니다.",
           "sourceId": "6b5f461faaa40a1a031725fa",
           "match": "confirmed_domain"
-        },
-        {
-          "field": "name",
-          "value": "네이버",
-          "sourceId": "reviewed-navercorp-home",
-          "match": "confirmed_domain"
-        },
-        {
-          "field": "website",
-          "value": "https://www.navercorp.com/",
-          "sourceId": "reviewed-navercorp-home",
-          "match": "confirmed_domain"
-        },
-        {
-          "field": "description",
-          "value": "기술과 서비스로 세상의 가능성을 연결하는 기업",
-          "sourceId": "reviewed-navercorp-home",
-          "match": "confirmed_domain"
-        },
-        {
-          "field": "products",
-          "value": "검색, 광고, 커머스, 클라우드, 핀테크, 콘텐츠, 지도 서비스",
-          "sourceId": "reviewed-navercorp-home",
-          "match": "confirmed_domain"
-        },
-        {
-          "field": "website",
-          "value": "https://www.navercorp.com/",
-          "sourceId": "32c202fee3e296b9bdb538e6",
-          "match": "confirmed_domain"
         }
       ],
       "collection": {
-        "status": "success",
-        "lastAttemptAt": "2026-10-21T14:42:46.004Z",
-        "lastSuccessAt": "2026-10-21T14:42:46.004Z",
+        "status": "partial",
+        "lastAttemptAt": "2026-10-21T15:25:27.257Z",
+        "lastSuccessAt": "2026-10-21T15:25:27.257Z",
         "sourceStatuses": [
           {
             "provider": "comwel",
             "insuranceType": "1",
             "label": "산재보험",
             "sourceUrl": "https://www.data.go.kr/data/15059256/openapi.do",
-            "checkedAt": "2026-10-21T14:42:53.655Z",
+            "checkedAt": "2026-10-21T15:25:34.053Z",
             "status": "error",
             "pages": 0,
             "returnedCount": 0,
@@ -462,7 +658,7 @@
             "insuranceType": "2",
             "label": "고용보험",
             "sourceUrl": "https://www.data.go.kr/data/15059256/openapi.do",
-            "checkedAt": "2026-10-21T14:42:53.655Z",
+            "checkedAt": "2026-10-21T15:25:34.053Z",
             "status": "error",
             "pages": 0,
             "returnedCount": 0,
@@ -477,7 +673,7 @@
             "insuranceType": "",
             "label": "공정위 통신판매업",
             "sourceUrl": "https://www.data.go.kr/data/15126315/openapi.do",
-            "checkedAt": "2026-10-21T14:42:54.055Z",
+            "checkedAt": "2026-10-21T15:25:34.331Z",
             "status": "not_configured",
             "pages": 0,
             "returnedCount": 0,
@@ -486,28 +682,189 @@
             "truncated": false,
             "errorCode": "not_configured",
             "message": "공정위 통신판매 API 인증키가 설정되지 않았습니다."
+          },
+          {
+            "provider": "web_page",
+            "insuranceType": "",
+            "label": "NAVER Corp.",
+            "sourceUrl": "https://www.navercorp.com/main",
+            "checkedAt": "2026-10-21T15:25:27.257Z",
+            "status": "success",
+            "pages": 1,
+            "returnedCount": 1,
+            "matchedCount": 1,
+            "totalCount": null,
+            "truncated": false
+          },
+          {
+            "provider": "web_page",
+            "insuranceType": "",
+            "label": "Contact l NAVER Corp.",
+            "sourceUrl": "https://www.navercorp.com/company/contact",
+            "checkedAt": "2026-10-21T15:25:27.257Z",
+            "status": "success",
+            "pages": 1,
+            "returnedCount": 2,
+            "matchedCount": 2,
+            "totalCount": null,
+            "truncated": false
+          },
+          {
+            "provider": "web_page",
+            "insuranceType": "",
+            "label": "네이버 주요 서비스 l NAVER Corp.",
+            "sourceUrl": "https://www.navercorp.com/service/featuredServices",
+            "checkedAt": "2026-10-21T15:25:27.257Z",
+            "status": "success",
+            "pages": 1,
+            "returnedCount": 1,
+            "matchedCount": 1,
+            "totalCount": null,
+            "truncated": false
+          },
+          {
+            "provider": "web_page",
+            "insuranceType": "",
+            "label": "center.shopping.naver.com 공개 페이지",
+            "sourceUrl": "https://center.shopping.naver.com/",
+            "checkedAt": "2026-10-21T15:25:27.257Z",
+            "status": "error",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "errorCode": "robots_unavailable",
+            "message": "수집 허용 정책을 확인하지 못했습니다."
+          },
+          {
+            "provider": "web_search",
+            "insuranceType": "",
+            "label": "공개 웹 검색 RSS 후보",
+            "sourceUrl": "https://www.bing.com/search?format=rss&q=%222208162517%22",
+            "checkedAt": "2026-10-21T15:25:27.257Z",
+            "status": "error",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "errorCode": "robots_disallowed",
+            "message": "원본 사이트의 수집 허용 범위 밖입니다."
+          },
+          {
+            "provider": "fsc",
+            "insuranceType": "",
+            "label": "금융위 기업개황",
+            "sourceUrl": "https://www.data.go.kr/data/15043184/openapi.do",
+            "checkedAt": "2026-10-21T15:25:34.331Z",
+            "status": "error",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "errorCode": "not_authorized",
+            "message": "해당 채널의 인증키·API 활용승인을 확인해야 합니다."
+          },
+          {
+            "provider": "dart",
+            "insuranceType": "",
+            "label": "DART 기업개황",
+            "sourceUrl": "https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS001&apiId=2019002",
+            "checkedAt": "2026-10-21T15:25:34.331Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "DART API 인증키가 필요합니다."
+          },
+          {
+            "provider": "naver_news",
+            "insuranceType": "",
+            "label": "네이버 뉴스",
+            "sourceUrl": "https://developers.naver.com/docs/serviceapi/search/news/news.md",
+            "checkedAt": "2026-10-21T15:25:34.331Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "네이버 검색 API Client ID·Secret이 필요합니다."
+          },
+          {
+            "provider": "naver_blog",
+            "insuranceType": "",
+            "label": "네이버 블로그",
+            "sourceUrl": "https://developers.naver.com/docs/serviceapi/search/blog/blog.md",
+            "checkedAt": "2026-10-21T15:25:34.331Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "네이버 검색 API Client ID·Secret이 필요합니다."
+          },
+          {
+            "provider": "naver_local",
+            "insuranceType": "",
+            "label": "네이버 지역",
+            "sourceUrl": "https://developers.naver.com/docs/serviceapi/search/local/local.md",
+            "checkedAt": "2026-10-21T15:25:34.331Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "네이버 검색 API Client ID·Secret이 필요합니다."
+          },
+          {
+            "provider": "kakao_local",
+            "insuranceType": "",
+            "label": "카카오 장소",
+            "sourceUrl": "https://developers.kakao.com/docs/latest/ko/local/dev-guide",
+            "checkedAt": "2026-10-21T15:25:34.331Z",
+            "status": "not_configured",
+            "pages": 0,
+            "returnedCount": 0,
+            "matchedCount": 0,
+            "totalCount": null,
+            "truncated": false,
+            "message": "카카오 REST API 키가 필요합니다."
           }
-        ]
+        ],
+        "error": "robots_unavailable"
       },
       "bno": "2208162517",
       "entityType": "unknown"
     }
   ],
   "meta": {
-    "generatedAt": "2026-10-21T14:42:54.056Z",
-    "status": "success",
+    "generatedAt": "2026-10-21T15:25:34.471Z",
+    "status": "partial",
     "attemptedCount": 2,
     "businessCount": 2,
-    "failedCount": 1,
-    "errors": [
-      {
-        "businessNumber": "6901100416",
-        "code": "unsupported_encoding"
-      }
-    ],
+    "failedCount": 0,
+    "errors": [],
     "policy": "Public business information only; exact BRN/domain evidence and source URLs retained. Discovery candidates are not verified facts.",
-    "collectionVersion": 1,
+    "collectionVersion": 2,
     "method": "github_actions_public_collection",
-    "sourceCount": 6
+    "sourceCount": 28,
+    "lastAttemptAt": "2026-10-21T15:25:27.257Z",
+    "lastSuccessAt": "2026-10-21T15:25:27.257Z",
+    "confirmedSourceCount": 9,
+    "candidateSourceCount": 19,
+    "fieldCount": 16,
+    "schedule": {
+      "label": "매일 오전 06:17 (한국 시간)",
+      "cron": "17 21 * * *",
+      "cronTimezone": "UTC",
+      "timezone": "Asia/Seoul"
+    }
   }
 }
