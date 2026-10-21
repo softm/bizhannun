@@ -52,6 +52,70 @@ test('a user name is preserved as an alias without becoming a public conflict or
   assert.equal(userOnly.profile.confirmedCount, 0);
 });
 
+test('automatic public names follow current evidence without becoming a user alias or changing status history', () => {
+  const saved = record({ collectedAt: '2026-10-20T00:00:00Z', sources: [source({ collectedAt: '2026-10-20T00:00:00Z' })] });
+  const latest = record();
+  latest.fields.find(field => field.field === 'name').value = '새로 확인한 공개 상호';
+  const lastSuccess = status({ checkedAt: '2026-10-20T10:00:00Z' });
+  const failed = status({ outcome: 'error', businessStatus: 'unknown' });
+  const partner = { businessNumber: BNO, name: '서해박속낙지전문점',
+    nameOrigin: { kind: 'public', value: '서해박속낙지전문점', sourceId: 'directory' }, enrichment: saved,
+    lastSuccess, lastCheck: failed, history: [lastSuccess, failed] };
+  const original = structuredClone(partner);
+  const model = build({ partner, check: failed, summary: summarizeEnrichment(latest) });
+  assert.equal(model.displayName, '새로 확인한 공개 상호');
+  assert.equal(model.publicName, '새로 확인한 공개 상호');
+  assert.equal(model.userName, '');
+  assert.equal(model.nameDifference, false);
+  assert.doesNotMatch(renderBusinessInsights(model), /저장한 별칭/);
+  assert.equal(model.status.usingPrevious, true);
+  assert.equal(model.status.checkedAt, '2026-10-20T10:00:00.000Z');
+  assert.equal(model.status.businessStatus, 'active');
+  assert.deepEqual(model.timeline.map(item => item.outcome), ['error', 'ok']);
+  assert.deepEqual(partner, original);
+
+  const savedOnly = build({ partner, summary: null });
+  assert.equal(savedOnly.displayName, '서해박속낙지전문점');
+  assert.equal(savedOnly.userName, '');
+  assert.equal(savedOnly.profile.confirmedCount, 5);
+});
+
+test('deliberate aliases, including edited automatic names and legacy names, remain user labels', () => {
+  const saved = record({ collectedAt: '2026-10-20T00:00:00Z', sources: [source({ collectedAt: '2026-10-20T00:00:00Z' })] });
+  const latest = record();
+  latest.fields.find(field => field.field === 'name').value = '새로 확인한 공개 상호';
+  for (const nameOrigin of [{ kind: 'user' }, { kind: 'public', value: '서해박속낙지전문점', sourceId: 'directory' }, undefined]) {
+    const partner = { businessNumber: BNO, name: '우리 단골 식당', enrichment: saved, ...(nameOrigin ? { nameOrigin } : {}) };
+    const original = structuredClone(partner);
+    const model = build({ partner, summary: summarizeEnrichment(latest) });
+    assert.equal(model.displayName, '우리 단골 식당');
+    assert.equal(model.userName, '우리 단골 식당');
+    assert.equal(model.publicName, '새로 확인한 공개 상호');
+    assert.equal(model.nameDifference, true);
+    assert.match(renderBusinessInsights(model), /저장한 별칭: 우리 단골 식당/);
+    assert.deepEqual(partner, original);
+  }
+});
+
+test('withdrawn public identity never turns an old automatic name into a user alias', () => {
+  const saved = record({ collectedAt: '2026-10-20T00:00:00Z', sources: [source({ collectedAt: '2026-10-20T00:00:00Z' })] });
+  const partner = { businessNumber: BNO, name: '서해박속낙지전문점',
+    nameOrigin: { kind: 'public', value: '서해박속낙지전문점', sourceId: 'directory' }, enrichment: saved };
+  const correction = record({ sources: [source({ match: 'candidate', identityMismatch: true })], fields: [],
+    collection: { status: 'partial', lastAttemptAt: STAMP, sourceStatuses: [{
+      provider: 'web_page', sourceUrl: saved.sources[0].url, status: 'identity_mismatch',
+      errorCode: 'entity_scope_mismatch', checkedAt: STAMP,
+    }] } });
+  const model = build({ partner, summary: summarizeEnrichment(correction) });
+  assert.equal(model.displayName, '690-11-00416');
+  assert.equal(model.userName, '');
+  assert.equal(model.publicName, '');
+  assert.equal(model.nameDifference, false);
+  assert.equal(model.profile.confirmedCount, 0);
+  assert.equal(model.evidence.candidateCount, 1);
+  assert.doesNotMatch(renderBusinessInsights(model), /저장한 별칭|서해박속낙지전문점/);
+});
+
 test('mismatched partner, check or summary never leak into another business insight', () => {
   const model = build({
     partner: { businessNumber: OTHER, name: '다른 업체', lastSuccess: status({ businessNumber: OTHER }) },

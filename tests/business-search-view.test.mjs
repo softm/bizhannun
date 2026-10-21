@@ -66,7 +66,7 @@ test('same-name businesses retain distinct number-based selection and selected s
   assert.match(html, /data-number="2208162517"/);
   assert.match(html, /data-number="6901100416"/);
   assert.match(html, /같은상호 220-81-62517 선택 후 조회/);
-  assert.match(html, /같은상호 690-11-00416 선택 후 조회/);
+  assert.match(html, /같은상호 690-11-00416 상세 다시 보기/);
   assert.equal((html.match(/class="business-candidate is-selected"/g) || []).length, 1);
   assert.match(html, /서울시 테스트길 1/);
   assert.match(html, /충남 서산시 테스트길 2/);

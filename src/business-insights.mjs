@@ -87,7 +87,8 @@ export function buildBusinessInsights({ businessNumber, partner = null, check = 
   const currentTime = clock(now);
   const linkedPartner = validNumber && sameNumber(partner, number) ? partner : null;
   const matchingSummary = validNumber && sameNumber(summary, number) ? summary : null;
-  const linkedSummary = matchingSummary ? resolveBusinessProfile({ businessNumber: number, summary: matchingSummary }).summary : null;
+  const linkedProfile = resolveBusinessProfile({ businessNumber: number, partner: linkedPartner, summary: matchingSummary });
+  const linkedSummary = linkedProfile.summary;
   const identityRejected = !!((partner && !linkedPartner) || (summary && !matchingSummary) || (check && (!validNumber || !sameNumber(check, number))));
   const sourceMap = new Map();
   for (const item of (Array.isArray(linkedSummary?.sources) ? linkedSummary.sources : []).slice(0, 1200)) {
@@ -118,8 +119,8 @@ export function buildBusinessInsights({ businessNumber, partner = null, check = 
     });
   }
   const byField = new Map(fields.map(item => [item.field, item]));
-  const publicName = byField.get('name')?.value || '';
-  const userName = clean(linkedPartner?.name, 200);
+  const publicName = clean(linkedProfile.publicName, 200);
+  const userName = clean(linkedProfile.userName, 200);
   const basic = BASIC_BUSINESS_FIELDS.map(field => ({
     field, label: ENRICHMENT_FIELDS[field], confirmed: byField.has(field), ...(byField.get(field) || {}),
   }));
@@ -195,8 +196,8 @@ export function buildBusinessInsights({ businessNumber, partner = null, check = 
 
   return {
     businessNumber: number, validNumber, identityMatched: !!linkedSummary && sources.length > 0, identityRejected,
-    displayName: userName || publicName || (validNumber ? formatBusinessNumber(number) : '사업자번호 미확인'),
-    userName, publicName, nameDifference: !!userName && !!publicName && valueKey('name', userName) !== valueKey('name', publicName),
+    displayName: linkedProfile.nameSource !== 'missing' ? clean(linkedProfile.displayName, 200) : (validNumber ? formatBusinessNumber(number) : '사업자번호 미확인'),
+    userName, publicName, nameDifference: linkedProfile.hasCustomName && valueKey('name', userName) !== valueKey('name', publicName),
     headline: actions[0]?.priority <= 5 ? actions[0].title : '확인한 정보와 다음 행동을 한눈에',
     status: {
       latestOutcome: latest?.outcome || null, latestCheckedAt: latest?.checkedAt || null,

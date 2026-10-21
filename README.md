@@ -4,10 +4,13 @@
 
 사업자등록번호 또는 상호·업체명으로 사업자를 찾고, 거래처 확인 기록과 지원사업을 관리하는 웹 앱입니다. 이름 검색은 공개 수집자료와 현재 계정·기기의 거래처·내 사업 프로필을 대상으로 하며, 업체를 선택하면 해당 사업자번호로 기존 상태조회와 통합정보를 연결합니다. Firebase 로그인과 계정별 Firestore 정보 보관을 지원하고, 공개정보의 출처·확인 시점과 실제 검색 범위를 표시합니다.
 
+v0.5 검색 화면은 검색 → 업체 선택 → 단일 상세로 구성합니다. 요약·사업자 정보·출처·수집·조회 이력 탭에서 필요한 내용을 확인합니다.
+
 v0.4의 수집 정보는 출처·확인 시각을 포함해 거래처와 내 사업 프로필에 구조화해서 저장합니다. 공개 웹·등록자료·검색 후보의 누락, 차이, 갱신 상태를 함께 확인할 수 있습니다.
 
 - 실행: [사업자한눈](https://softm.github.io/bizhannun/) · [로그인·계정 보관](https://softm.github.io/bizhannun/#account)
 - 데이터 현황: [data-status.html](https://softm.github.io/bizhannun/data-status.html)
+- 검색 화면의 정보구조·디자인·탭 설계: [docs/SEARCH_EXPERIENCE.md](docs/SEARCH_EXPERIENCE.md)
 - 상호·업체명 검색 사용법·범위·검증: [docs/NAME_SEARCH.md](docs/NAME_SEARCH.md)
 - 거래처 정보 연결·사업자 인사이트 기획: [docs/BUSINESS_INSIGHTS.md](docs/BUSINESS_INSIGHTS.md)
 - 사업자 통합정보 수집·출처·확장: [docs/BUSINESS_ENRICHMENT.md](docs/BUSINESS_ENRICHMENT.md)

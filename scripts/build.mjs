@@ -62,7 +62,7 @@ for (const filename of files.filter((name) => name.endsWith('.json') || name.end
 const auth = JSON.parse(await readFile(join(ROOT, 'config/firebase-public.json'), 'utf8'));
 auth.providers.kakao = { configured: false, reason: '별도 인증 서버 연결 준비 중입니다.' };
 auth.providers.naver = { configured: false, reason: '별도 인증 서버 연결 준비 중입니다.' };
-const runtime = { mode: 'direct', apiBase: '', version: '0.4.0',
+const runtime = { mode: 'direct', apiBase: '', version: '0.5.0',
   ntsServiceKey: process.env.NTS_SERVICE_KEY?.trim() || '', auth };
 if (process.env.GITHUB_ACTIONS === 'true' && !runtime.ntsServiceKey) {
   throw new Error('Repository Secret NTS_SERVICE_KEY를 등록한 뒤 배포하세요.');
