@@ -729,12 +729,14 @@ function detailModal(partner,{refresh=false}={}) {
   const state=modal.detailState;
   const focus=modalRoot.contains(document.activeElement)?describeFocus(document.activeElement):null;
   const scroll=modalRoot.querySelector('.modal-body')?.scrollTop||0;
+  const tabBarScroll=modalRoot.querySelector('.detail-tabs')?.scrollLeft||0;
   const expanded=[...modalRoot.querySelectorAll('details[open]')].map(item=>item.querySelector('summary')?.textContent);
   const view=renderBusinessDetail(detailArguments(partner));
   modal.title=view.title;modal.body=view.body;state.renderPending=false;
   modalRoot.innerHTML=`<div class="modal-backdrop" data-action="close-modal-backdrop"><section class="modal wide partner-detail-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" data-business-number="${esc(partner.businessNumber)}"><header class="modal-header">${view.header}</header>${view.tabs}<div class="modal-body">${view.body}</div>${view.footer}</section></div>`;
   for(const item of modalRoot.querySelectorAll('details'))if(expanded.includes(item.querySelector('summary')?.textContent))item.open=true;
   if(same){
+    modalRoot.querySelector('.detail-tabs').scrollLeft=tabBarScroll;
     const target=resolveFocus(modalRoot,focus);
     if(target&&!target.disabled&&!target.closest('[hidden]')){
       target.focus({preventScroll:true});
@@ -754,6 +756,7 @@ function switchDetailTab(tab,{focus=false,editor=false}={}) {
   body.scrollTop=state.tabScroll[tab]||0;
   if(editor)modalRoot.querySelector('#detail-note')?.focus({preventScroll:true});
   else if(focus||document.activeElement?.closest('[role=tabpanel][hidden]'))modalRoot.querySelector('#detail-tab-'+tab)?.focus({preventScroll:true});
+  modalRoot.querySelector('#detail-tab-'+tab)?.scrollIntoView({block:'nearest',inline:'nearest'});
 }
 async function saveDetailNotes(form) {
   const activeModal=modal,epoch=accountEpoch;
