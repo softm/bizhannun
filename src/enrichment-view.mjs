@@ -25,7 +25,7 @@ export function renderEnrichment({businessNumber,summary,record,loading=false,er
   return `<section data-bno="${esc(bno)}" data-business-number="${esc(bno)}" class="card enrichment-panel ${compact?'enrichment-compact':''}" aria-label="사업자 통합 정보" aria-live="polite">
     <div class="card-header"><div><div class="eyebrow">BUSINESS INTELLIGENCE</div><h2>${esc(company||'사업자')} 통합 정보</h2><p class="fine-print">사업자번호로 연결한 공개자료와 웹 채널을 한곳에서 확인합니다.</p></div><button class="button small" data-action="reload-enrichment" data-bno="${esc(bno)}" data-business-number="${esc(bno)}">자료 새로고침</button></div>
     <div class="enrichment-body">
-      <div class="enrichment-metrics"><span><strong>${fields.length}</strong>개 확인 항목</span><span><strong>${confirmed.length}</strong>개 연결 출처</span><span><strong>${candidates.length}</strong>개 확인할 후보</span><span class="collection-time-badge">마지막 성공 자료 · ${esc(when(analysis?.metrics?.latestCollectedAt||summary?.collection?.lastSuccessAt||summary?.collectedAt||record?.collectedAt))}</span><span class="collection-time-badge">자동 수집 · 매일 06:17</span></div>
+      <div class="enrichment-metrics"><span><strong>${fields.length}</strong>개 확인 항목</span><span><strong>${confirmed.length}</strong>개 확인된 출처 기록</span><span><strong>${candidates.length}</strong>개 확인할 후보</span><span class="collection-time-badge">마지막 성공 자료 · ${esc(when(analysis?.metrics?.latestCollectedAt||summary?.collection?.lastSuccessAt||summary?.collectedAt||record?.collectedAt))}</span><span class="collection-time-badge">자동 수집 · 매일 06:17</span></div>
       ${renderBusinessInsights(analysis)}
       ${loading?'<p class="inline-loading"><span class="spinner"></span> 공개 사업자 정보를 불러오고 있습니다.</p>':''}
       ${error?`<p class="callout warning">${esc(error)}</p>`:''}

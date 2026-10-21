@@ -521,7 +521,7 @@ function programCard(item) {
 function profileView() {
   const p=ui.profileDraft||workspace.profile;
   return pageHeading('내 사업을 알려주세요','공개정보로 채워지지 않는 항목을 보완하면, 기회를 찾기 쉬워져요.')+`
-  ${p.enrichment?`<div class="callout profile-evidence-note">${icon('link')}<span>공개자료에서 확인한 정보를 함께 보관합니다. 아래 값을 검토하고 프로필을 저장하세요. <button class="text-button" data-action="profile-evidence" data-business-number="${esc(p.businessNumber)}">출처 ${p.enrichment.sources.length}곳 확인</button></span></div>`:''}
+  ${p.enrichment?`<div class="callout profile-evidence-note">${icon('link')}<span>공개자료에서 확인한 정보를 함께 보관합니다. 아래 값을 검토하고 프로필을 저장하세요. <button class="text-button" data-action="profile-evidence" data-business-number="${esc(p.businessNumber)}">출처 자료 ${p.enrichment.sources.length}개 확인</button></span></div>`:''}
   <div class="profile-layout"><form id="profile-form" class="card form-card">
   <div class="section-row"><h2 class="section-title">사업 프로필</h2><span class="mode-label">${authState.user?'내 계정에 저장':'이 기기에 저장'}</span></div>
   <div class="form-grid">
