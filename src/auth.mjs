@@ -139,7 +139,7 @@ async function fetchConfiguration(url, fetchImpl) {
 
 /** Authentication only; caller selects the UID-scoped workspace on user change. */
 export function createAuthClient({ apiBase = '', onStateChange, fetchImpl = globalThis.fetch,
-  sdkLoader = () => import('./firebase-sdk.mjs'), windowRef = globalThis.window, socialTimeoutMs = 120000 } = {}) {
+  publicConfig, sdkLoader = () => import('./firebase-sdk.mjs'), windowRef = globalThis.window, socialTimeoutMs = 120000 } = {}) {
   const origin = windowRef?.location?.origin;
   let apiOrigin;
   try { apiOrigin = validateApiBase(apiBase) || new URL(origin).origin; } catch { throw new AuthClientError('configuration_error'); }
@@ -216,7 +216,7 @@ export function createAuthClient({ apiBase = '', onStateChange, fetchImpl = glob
       if (disposed) return Promise.reject(new AuthClientError('disposed'));
       emit({ phase: 'initializing', error: null });
       initPromise = (async () => {
-        const config = normalizeAuthConfig(await fetchConfiguration(`${apiOrigin}/api/config`, fetchImpl), origin);
+        const config = normalizeAuthConfig(publicConfig ?? await fetchConfiguration(`${apiOrigin}/api/config`, fetchImpl), origin);
         if (disposed) throw new AuthClientError('disposed');
         if (!config.configured) { emit({ phase: 'unconfigured', configured: false, config, providers: config.providers, user: null }); return { ...state }; }
         const sdk = await sdkLoader();

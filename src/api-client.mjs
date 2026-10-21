@@ -1,3 +1,4 @@
+import { callDirectApi } from './direct-api.mjs';
 export class ApiError extends Error {
   constructor(message, code = 'network_error') { super(message); this.code = code; }
 }
@@ -12,6 +13,7 @@ export function validateApiBase(value) {
 }
 
 export async function callApi(path, payload, apiBase = '', { signal } = {}) {
+  if (globalThis.window?.BIZHANNUN_CONFIG?.mode === 'direct') return callDirectApi(path, payload, window.BIZHANNUN_CONFIG, { signal });
   const base = validateApiBase(apiBase);
   const timeout = AbortSignal.timeout(22000);
   try {

@@ -2,7 +2,6 @@ import { copyFile, lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:f
 import { extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
-import { validateApiBase } from '../src/api-client.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const DIST = join(ROOT, 'dist');
@@ -32,13 +31,8 @@ async function collectFiles(directory, extensions, prefix = '') {
   return result;
 }
 
-// Only the public API origin is a build setting. Service keys are never read.
-let apiBase;
-if (process.env.BIZ_API_BASE?.trim()) {
-  try { apiBase = validateApiBase(process.env.BIZ_API_BASE); }
-  catch { throw new Error('BIZ_API_BASE에는 경로·쿼리·인증정보가 없는 HTTPS 서버 주소만 설정하세요. 로컬 HTTP는 localhost/127.0.0.1에서만 허용합니다.'); }
-}
-
+// Direct mode injects the user-authorized public runtime key only into dist.
+// Never commit generated settings or print the key.
 const files = [...ROOT_FILES];
 for (const [directory, extensions] of Object.entries(RULES)) {
   files.push(...(await collectFiles(join(ROOT, directory), extensions)).map((name) => join(directory, name)));
@@ -65,16 +59,22 @@ for (const filename of files.filter((name) => name.endsWith('.json') || name.end
   JSON.parse(await readFile(join(ROOT, filename), 'utf8'));
 }
 
+const auth = JSON.parse(await readFile(join(ROOT, 'config/firebase-public.json'), 'utf8'));
+auth.providers.kakao = { configured: false, reason: '별도 인증 서버 연결 준비 중입니다.' };
+auth.providers.naver = { configured: false, reason: '별도 인증 서버 연결 준비 중입니다.' };
+const runtime = { mode: 'direct', apiBase: '', version: '0.3.0',
+  ntsServiceKey: process.env.NTS_SERVICE_KEY?.trim() || '', auth };
+if (process.env.GITHUB_ACTIONS === 'true' && !runtime.ntsServiceKey) {
+  throw new Error('Repository Secret NTS_SERVICE_KEY를 등록한 뒤 배포하세요.');
+}
+
 await rm(DIST, { recursive: true, force: true });
 await mkdir(DIST, { recursive: true });
 for (const filename of files) {
   await mkdir(join(DIST, filename, '..'), { recursive: true });
   await copyFile(join(ROOT, filename), join(DIST, filename));
 }
-if (apiBase !== undefined) {
-  const configuration = await readFile(join(DIST, 'app-config.js'), 'utf8');
-  await writeFile(join(DIST, 'app-config.js'), `${configuration.trimEnd()}\nwindow.BIZHANNUN_CONFIG = Object.freeze({ ...window.BIZHANNUN_CONFIG, apiBase: ${JSON.stringify(apiBase)} });\n`);
-}
+await writeFile(join(DIST, 'app-config.js'), `window.BIZHANNUN_CONFIG = Object.freeze(${JSON.stringify(runtime).replaceAll('<', '\\u003c')});\n`);
 // Give HTML, settings and every browser module the same content-based version.
 // This prevents an older cached import from mixing with a newly deployed page.
 const browserFiles = files.filter((name) => name === 'app-config.js' || name === 'styles.css' || (name.startsWith(`src${sep}`) && ['.mjs', '.js'].includes(extname(name)))).sort();
@@ -92,4 +92,4 @@ for (const filename of ['index.html', 'data-status.html']) {
   await writeFile(join(DIST, filename), versioned);
 }
 await writeFile(join(DIST, '.nojekyll'), '');
-console.log(`공개 파일 ${files.length + 1}개를 dist/에 빌드했습니다. 서버 코드·인증키·문서는 포함하지 않습니다.`);
+console.log(`공개 파일 ${files.length + 1}개를 dist/에 빌드했습니다. 서버 코드·서버 인증정보·문서는 포함하지 않습니다. 직접 조회용 키는 배포 설정에 주입됩니다.`);

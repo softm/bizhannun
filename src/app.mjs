@@ -88,7 +88,7 @@ const ui = {
 };
 const app = document.getElementById('app');
 const modalRoot = document.getElementById('modal-root');
-const currentApiBase = () => workspace.preferences?.apiBase || window.BIZHANNUN_CONFIG?.apiBase || '';
+const currentApiBase = () => window.BIZHANNUN_CONFIG?.mode === 'direct' ? '' : workspace.preferences?.apiBase || window.BIZHANNUN_CONFIG?.apiBase || '';
 const byId = id => workspace.partners.find(p=>p.id===id);
 const byNumber = n => workspace.partners.find(p=>p.businessNumber===n);
 const getSourceName = source => typeof source === 'string' ? source : source?.name || '국세청';
@@ -468,7 +468,7 @@ function dataView() {
     <tr><td>연결 범위</td><td>${esc(collection.selectionPolicy||programMeta.selectionPolicy||'수집 상태 확인 필요')}${collection.selectionLimit?` · 최대 ${number(collection.selectionLimit)}건`:''}</td></tr>
     <tr><td>제외·누락</td><td>${number(collection.excludedCount||collection.skippedCount||0)}건 · ${esc(collection.message||'수집 상세는 상태 JSON에서 확인')}</td></tr>
   </tbody></table><div class="card-foot"><a class="text-button" href="./data/collection-status.json" target="_blank" rel="noopener">수집 상태 JSON 보기 ${icon('external')}</a></div></section>
-  <section class="card guide-card"><h2 class="section-title">조회 서버 연결</h2><p class="fine-print" style="margin-top:10px">현재 연결 주소</p><p class="mono" style="overflow-wrap:anywhere;margin:8px 0 13px">${esc(currentApiBase()||location.origin+' (동일 서버)')}</p>${healthError?`<div class="callout warning" style="margin-bottom:14px">${icon('info')}<span>${esc(healthError)}</span></div>`:''}<div class="button-row"><button class="button small" data-action="connection-settings">${icon('link')} 서버 주소 설정</button><button class="button small" data-action="refresh-health">${icon('refresh')} 상태 확인</button></div><p class="fine-print" style="margin-top:13px">API 인증키는 서버 환경변수에만 보관합니다. 브라우저에는 인증키를 입력하거나 저장하지 않습니다.</p><div class="divider"></div><h3 style="font-size:12px">앞으로 연결할 데이터</h3><p class="fine-print" style="margin-top:8px">법인 공개재무·국민연금·업종별 인허가는 대상 식별과 이용 조건을 검증한 뒤 확장합니다. 현재 조회되는 정보로 표시하지 않습니다.</p></section></div>`;
+  <section class="card guide-card"><h2 class="section-title">조회 연결</h2><p class="fine-print" style="margin-top:10px">현재 연결 주소</p><p class="mono" style="overflow-wrap:anywhere;margin:8px 0 13px">${esc(window.BIZHANNUN_CONFIG?.mode==='direct'?'브라우저 → 제공기관 직접 호출':currentApiBase()||location.origin+' (동일 서버)')}</p>${healthError?`<div class="callout warning" style="margin-bottom:14px">${icon('info')}<span>${esc(healthError)}</span></div>`:''}<div class="button-row">${window.BIZHANNUN_CONFIG?.mode==='direct'?'':'<button class="button small" data-action="connection-settings">서버 주소 설정</button>'}<button class="button small" data-action="refresh-health">${icon('refresh')} 상태 확인</button></div><p class="fine-print" style="margin-top:13px">${window.BIZHANNUN_CONFIG?.mode==='direct'?'국세청은 브라우저에서 직접 조회합니다. 인증키는 GitHub Secret에서 배포 시 주입하며, 배포된 앱과 요청에서는 확인할 수 있습니다.':'API 인증키는 서버 환경변수에 보관합니다.'}</p><div class="divider"></div><h3 style="font-size:12px">앞으로 연결할 데이터</h3><p class="fine-print" style="margin-top:8px">법인 공개재무·국민연금·업종별 인허가는 대상 식별과 이용 조건을 검증한 뒤 확장합니다. 현재 조회되는 정보로 표시하지 않습니다.</p></section></div>`;
 }
 
 
@@ -531,7 +531,8 @@ function programModal(id) {
   openModal('지원사업 조건 확인',`<div class="program-source">${esc(p.agency||p.source||'')}</div><h2 style="font-size:19px;margin:8px 0 15px">${esc(p.title)}</h2><div class="callout">${icon('info')}<span>공개 목록과 입력 프로필을 바탕으로 찾은 관련 공고입니다. <strong>지원 자격 충족이나 선정 가능성을 확정한 결과가 아닙니다.</strong></span></div><dl class="detail-grid"><div class="detail-fact"><dt>지역</dt><dd>${esc((p.regions||[]).join(', ')||'원문 확인')}<small>대상지역인지 수행지역인지 원문 확인</small></dd></div><div class="detail-fact"><dt>신청기간</dt><dd>${esc(p.startDate?fmtDate(p.startDate):'원문 확인')} ~ ${esc(p.endDate?fmtDate(p.endDate):'원문 확인')}</dd></div></dl><h3 style="font-size:13px;margin-top:17px">관련 정보</h3>${(item.reasons||[]).map(r=>`<div class="insight-card">${icon('check')}<p style="font-size:12px">${esc(typeof r==='string'?r:r.message||r.label)}</p></div>`).join('')||'<p class="fine-print" style="margin-top:8px">현재 프로필로 확인할 수 있는 공통 조건이 부족합니다.</p>'}<h3 style="font-size:13px;margin-top:20px">추가로 확인할 조건</h3><ul class="fine-print">${missing.map(m=>`<li>${esc(typeof m==='string'?m:m.message||m.label)}</li>`).join('')}</ul><p class="fine-print">본문을 임의로 합치거나 요약하지 않습니다. 아래 링크에서 해당 공고의 원문·첨부·최신 접수기간을 확인해 주세요.</p><div class="modal-actions">${external(p.sourceUrl||p.applyUrl,'공식 원문 확인','button primary')}<a class="button" href="./#profile" data-nav="profile">내 프로필 보완</a></div>`);
 }
 function connectionModal() {
-  openModal('조회 서버 연결',`<form id="connection-form"><div class="callout">${icon('shield')}<span>서버의 HTTPS 주소만 입력합니다. 국세청·공정위 인증키는 여기에 입력하지 마세요.</span></div><div class="form-field" style="margin-top:17px"><label for="api-base">API 서버 주소</label><input id="api-base" name="apiBase" type="url" value="${esc(currentApiBase())}" placeholder="https://내-프로젝트.vercel.app"><span class="hint">입력한 서버로 조회할 사업자번호가 전달됩니다. 본인이 운영하거나 신뢰하는 서버만 사용하세요.</span></div><div id="connection-error" class="field-error" role="alert"></div><div class="modal-actions"><button class="button" type="button" data-action="close-modal">취소</button><button class="button primary" type="submit">저장하고 연결 확인</button></div></form>`);
+  if(window.BIZHANNUN_CONFIG?.mode==='direct'){toast('브라우저에서 국세청으로 직접 조회합니다.');return;}
+  openModal('조회 서버 연결',`<form id="connection-form"><div class="callout">${icon('shield')}<span>서버의 HTTPS 주소만 입력합니다. 국세청·공정위 인증키는 여기에 입력하지 마세요.</span></div><div class="form-field" style="margin-top:17px"><label for="api-base">API 서버 주소</label><input id="api-base" name="apiBase" type="url" value="${esc(currentApiBase())}" placeholder="https://api.example.com"><span class="hint">입력한 서버로 조회할 사업자번호가 전달됩니다. 본인이 운영하거나 신뢰하는 서버만 사용하세요.</span></div><div id="connection-error" class="field-error" role="alert"></div><div class="modal-actions"><button class="button" type="button" data-action="close-modal">취소</button><button class="button primary" type="submit">저장하고 연결 확인</button></div></form>`);
 }
 function validateModal() {
   if(!ui.lookup)return;
@@ -841,6 +842,6 @@ try {workspace=await loadWorkspace();guestWorkspace=structuredClone(workspace);}
 catch(error){storageError='이 브라우저에서 기록을 불러오지 못했습니다. 저장 기능을 사용하려면 브라우저 저장소 설정을 확인해 주세요.';}
 if(!titles[ui.view])ui.view='lookup';
 render();
-authClient=createAuthClient({apiBase:window.BIZHANNUN_CONFIG?.apiBase||'',onStateChange:receiveAuthState});
+authClient=createAuthClient({publicConfig:window.BIZHANNUN_CONFIG?.auth,apiBase:window.BIZHANNUN_CONFIG?.apiBase||'',onStateChange:receiveAuthState});
 Promise.allSettled([checkHealth(),refreshPrograms(),authClient.init()]);
 

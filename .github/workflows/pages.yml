@@ -81,8 +81,8 @@ jobs:
 
       - name: Build public website
         env:
-          # This repository variable is a public origin, never an API key.
-          BIZ_API_BASE: ${{ vars.BIZ_API_BASE || 'https://bizhannun.vercel.app' }}
+          # Intentionally public in deployed browser runtime; never committed to git.
+          NTS_SERVICE_KEY: ${{ secrets.NTS_SERVICE_KEY }}
         run: npm run build
 
       - name: Upload Pages artifact

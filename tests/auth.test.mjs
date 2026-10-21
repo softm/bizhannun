@@ -259,3 +259,13 @@ test('wrong credentials and unknown errors never disclose raw authentication det
   assert.equal(authErrorMessage({ code: 'auth/wrong-password' }), authErrorMessage({ code: 'auth/user-not-found' }));
   assert.doesNotMatch(authErrorMessage({ code: 'unknown', message: 'token=secret' }), /token|secret/);
 });
+
+test('Pages Firebase configuration initializes login without any API server request', async () => {
+  const sdk = fakeSdk();
+  const client = createAuthClient({ publicConfig: config(), sdkLoader: async () => sdk,
+    windowRef: fakeWindow(), fetchImpl: () => { throw new Error('No API server permitted'); } });
+  await client.init();
+  await client.signIn('google');
+  assert.equal(sdk.auth.currentUser.uid, 'google-user');
+  client.destroy();
+});
