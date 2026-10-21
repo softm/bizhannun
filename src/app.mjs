@@ -190,6 +190,11 @@ function accountConfirm(action,title,message){
   openModal(title,`<p class="fine-print">${esc(message)}</p><div class="modal-actions"><button class="button" data-action="close-modal">취소</button><button class="button primary" data-action="${action}">계속하기</button></div>`);
   modal.accountEpoch=accountEpoch;
 }
+function blockLoginForProfileDraft(){
+  if(!ui.profileDraft)return false;
+  openModal('작성 중인 사업 프로필을 먼저 저장해 주세요',`<p class="fine-print">로그인하면 계정의 자료를 불러옵니다. 입력 중인 사업 프로필을 잃지 않도록 내 사업 화면에서 먼저 저장해 주세요. 저장한 뒤 다시 로그인할 수 있습니다. 기기 자료를 계정으로 가져올지는 로그인 후 선택할 수 있습니다.</p><div class="modal-actions"><button class="button" data-action="close-modal">닫기</button><button class="button primary" data-action="auth-return-profile">내 사업으로 돌아가 저장하기</button></div>`);
+  return true;
+}
 function workspaceNotice(){
   if(accountTransition)return '<div class="callout storage-warning" role="status"><span class="spinner"></span><span>계정의 기록을 불러오고 있습니다.</span></div>';
   if(remoteRevision)return '<div class="callout warning storage-warning"><span>다른 기기에서 기록이 변경되었습니다. <button class="text-button" data-action="cloud-reload-confirm">최신 기록 확인</button></span></div>';
@@ -224,7 +229,8 @@ function accountView(){
   </section><section class="card account-card account-benefits"><div class="account-hero-icon">${icon('shield')}</div><h2>정보도 함께 저장합니다</h2><div class="guide-step"><span class="step-number">01</span><div><h3>거래처와 메모</h3><p>거래처, 분류 태그와 업무 메모를 계정에 보관합니다.</p></div></div><div class="guide-step"><span class="step-number">02</span><div><h3>조회 이력과 내 사업</h3><p>사업자 상태 조회와 변경 기록, 지원사업 탐색용 프로필을 함께 저장합니다.</p></div></div><div class="guide-step"><span class="step-number">03</span><div><h3>기존 자료 이어 쓰기</h3><p>이 브라우저의 자료는 로그인 후 가져오기로 옮길 수 있습니다.</p></div></div><div class="divider"></div><p class="fine-print">로그인 없이도 이 기기에 저장하며 사용할 수 있습니다. 로그아웃 상태의 자료는 다른 기기와 동기화되지 않습니다.</p><button class="button section-spacer" data-nav="partners">이 기기에서 계속하기 ${icon('arrow')}</button></section></div>`;
 }
 async function handleAccountAction(action,element){
-  if(action==='auth-provider'){await runAuth(()=>authClient.signIn(element.dataset.provider));return true;}
+  if(action==='auth-return-profile'){closeModal();go('profile');return true;}
+  if(action==='auth-provider'){if(blockLoginForProfileDraft())return true;await runAuth(()=>authClient.signIn(element.dataset.provider));return true;}
   if(action==='auth-retry'){await authClient.init();return true;}
   if(action==='auth-mode'){authMode=['signin','signup','reset'].includes(element.dataset.mode)?element.dataset.mode:'signin';accountError='';accountNotice='';render();return true;}
   if(action==='auth-verify'){await runAuth(async()=>{await authClient.sendVerification();accountNotice='인증 메일을 보냈습니다.';});return true;}
@@ -256,6 +262,8 @@ async function handleAccountAction(action,element){
   return false;
 }
 async function submitAuth(form){
+  if(!form.reportValidity())return;
+  if(authMode!=='reset'&&blockLoginForProfileDraft())return;
   const data=new FormData(form),email=String(data.get('email')||''),password=String(data.get('password')||'');
   await runAuth(async()=>{
     if(authMode==='reset'){await authClient.resetPassword(email);accountNotice='입력한 주소로 재설정 안내를 요청했습니다. 받은 메일을 확인해 주세요.';}
