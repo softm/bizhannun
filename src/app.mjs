@@ -498,7 +498,12 @@ function renderStoreProgress() {
   if(lookupComposing){renderAfterComposition=true;return;}
   const area=document.getElementById('store-search-area');
   // Do not replace a select that the user is operating, or the search input.
-  if(area && !area.contains(document.activeElement))area.innerHTML=renderStoreCatalogSearch({...storeSearch,manifest:storeManifest});
+  const active=document.activeElement;
+  if(area && !(area.contains(active)&&active.matches('select,input,button,a,summary'))){
+    const focusId=area.contains(active)?active.id:'';
+    area.innerHTML=renderStoreCatalogSearch({...storeSearch,manifest:storeManifest});
+    if(focusId)document.getElementById(focusId)?.focus({preventScroll:true});
+  }
 }
 async function searchStoreCatalog(query,{regionCode=storeSearch.regionCode,refresh=false}={}) {
   const serial=++storeSerial;
