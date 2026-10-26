@@ -9,6 +9,8 @@ import { buildBusinessInsights } from './business-insights.mjs';
 import { renderBusinessInsights } from './business-insights-view.mjs';
 import { classifyBusinessQuery, buildBusinessSearchIndex, searchBusinesses } from './business-search.mjs';
 import { renderBusinessSearch } from './business-search-view.mjs';
+import { createStoreCatalogClient } from './store-catalog-client.mjs';
+import { renderStoreCatalogSearch, renderStoreCatalogDetail, renderStoreCatalogStatus } from './store-catalog-view.mjs';
 import { renderBusinessWorkbench, LOOKUP_TABS, normalizeLookupTab, lookupTabForInsight } from './business-workbench-view.mjs';
 import { renderCollectionDashboard, buildBusinessProfileDraft, evidenceChanges } from './business-dashboard.mjs';
 import { renderBusinessDetail, buildBusinessDetailReport } from './business-detail-view.mjs';
@@ -94,6 +96,10 @@ let publicIndexPromise = null;
 let lookupSerial = 0;
 let interactionEpoch = 0;
 let businessIndexCache = null;
+const storeClient = createStoreCatalogClient();
+let storeManifest = null, storeStatus = {}, storeMetadataError = '', storeMetadataLoading = false;
+let storeMetadataPromise = null, storeSerial = 0;
+let storeSearch = { query:'', result:null, loading:false, error:'', regionCode:'', selected:null, page:1 };
 let lookupComposing = false;
 let renderAfterComposition = false;
 let healthSerial = 0;
@@ -200,7 +206,7 @@ async function switchAccount(uid){
   cloudStore?.dispose();cloudStore=null;
   activeUid=uid;cloudReady=false;accountTransition=true;saving=false;
   accountError='';accountNotice='';storageError='';remoteRevision=0;
-  lookupSerial++;interactionEpoch++;restoreSelection++;importSelection++;
+  lookupSerial++;interactionEpoch++;restoreSelection++;importSelection++;resetStoreSearch();
   ui.lookup=null;ui.lookupBusy=false;ui.commerce=null;ui.profileDraft=null;
   ui.lookupQuery='';ui.lookupError='';ui.lookupSelection=null;ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';ui.nameSearchPage=1;
   ui.lookupTab='overview';ui.lookupPendingNumber='';ui.nameResultsExpanded=false;
@@ -345,7 +351,7 @@ function shell(content) {
     <nav>${nav}</nav>
     <div class="side-spacer"></div>
     <div class="local-card">${icon('shield')}<div><strong>${authState.user?'내 계정에 보관':'이 기기에 보관'}</strong>${authState.user?esc(accountStorageStatus().label):'로그인하면 다른 기기에서도<br>내 기록을 이어서 볼 수 있어요.'}</div></div>
-    <div class="side-foot"><span>© bizhannun</span><span>v0.5</span></div>
+    <div class="side-foot"><span>© bizhannun</span><span>v0.6</span></div>
   </aside>
   <div class="main-wrap">
     <header class="topbar">
@@ -415,14 +421,14 @@ function portfolioView() {
   return `<section class="card portfolio-panel" aria-label="거래처 점검"><div class="card-header"><div><h2>거래처 점검</h2><p class="fine-print">${number(workspace.partners.length)}곳의 확인 기록과 공개자료를 함께 살펴봅니다.</p></div><button class="text-button" data-action="insight-filter" data-filter="all">전체 거래처 ${icon('chevron')}</button></div><div class="portfolio-grid">${options.map(([key,label,count,desc,symbol])=>`<button class="portfolio-metric ${ui.partnerInsight===key&&ui.view==='partners'?'is-selected':''}" data-action="insight-filter" data-filter="${key}" aria-label="${label} ${count}곳 보기"><span>${icon(symbol)}${label}</span><strong>${count}<small>곳</small></strong><p>${desc}</p></button>`).join('')}</div><p class="portfolio-note">확인할 정보의 범위입니다. 업체의 신용등급이나 거래 안전성을 평가한 수치가 아닙니다.</p>${publicIndexError?`<p class="insight-notice is-attention">${esc(publicIndexError)}</p>`:''}</section>`;
 }
 function lookupView() {
-  const hasActivity=!!(ui.nameQuery||ui.lookup||ui.lookupBusy);
-  const selectedContext=!!ui.nameQuery&&!!(ui.lookup||ui.lookupBusy);
+  const hasActivity=!!(ui.nameQuery||ui.lookup||ui.lookupBusy||storeSearch.query);
+  const selectedContext=!!ui.nameQuery&&!!(ui.lookup||ui.lookupBusy||storeSearch.selected);
   const showResults=!selectedContext||ui.nameResultsExpanded;
-  const search=ui.nameQuery?currentNameSearch():null;
   const index=businessSearchIndex();
-  const searchScope=!publicIndexLoaded&&!publicIndexError?'공개목록 불러오는 중':publicIndexError?'공개목록 연결 확인 필요':`수집·저장 ${number(index.totalCount)}곳 대상`;
+  const searchScope=!publicIndexLoaded&&!publicIndexError?'공개목록 불러오는 중':publicIndexError?'공개목록 연결 확인 필요':`번호 연결 ${number(index.totalCount)}곳`;
+  const storeScope=storeManifest?`전국 상가 ${number(storeManifest.acceptedCount)}곳`:storeMetadataLoading?'전국 상가 목록 확인 중':'전국 상가 목록 연결 확인 필요';
   return `<div class="lookup-page">
-    <header class="lookup-heading"><h1>사업자 조회</h1><p>이름이나 등록번호로 찾고, 같은 번호의 정보를 확인하세요.</p></header>
+    <header class="lookup-heading"><h1>사업자 조회</h1><p>상호 일부로 전국 상가를 찾거나, 사업자번호로 등록 상태를 확인하세요.</p></header>
     <section class="card lookup-search" aria-label="사업자 이름 또는 등록번호 조회">
       <form id="lookup-form" role="search" aria-label="사업자 검색">
         <div class="lookup-input-row">
@@ -430,22 +436,22 @@ function lookupView() {
           <select id="lookup-type" name="lookupType"><option value="auto" ${ui.lookupType==='auto'?'selected':''}>자동 구분</option><option value="name" ${ui.lookupType==='name'?'selected':''}>상호·업체명</option><option value="number" ${ui.lookupType==='number'?'selected':''}>사업자번호</option></select>
           <label class="sr-only" for="business-query">사업자등록번호 또는 상호·업체명</label>
           <input id="business-query" name="businessQuery" type="search" inputmode="${ui.lookupType==='number'?'numeric':'search'}" autocomplete="off" enterkeyhint="search" spellcheck="false" placeholder="${ui.lookupType==='number'?'사업자등록번호 10자리':'상호 일부 또는 사업자등록번호 10자리'}" value="${esc(ui.lookupQuery)}" maxlength="200" aria-describedby="lookup-error lookup-hint" ${ui.lookupError?'aria-invalid="true"':''} required>
-          <button class="button primary" type="submit" ${ui.lookupBusy||ui.nameSearchBusy?'aria-busy="true"':''}>${ui.lookupBusy||ui.nameSearchBusy?'<span class="spinner"></span> 검색 중':icon('search')+' 검색하기'}</button>
+          <button class="button primary" type="submit" ${ui.lookupBusy||ui.nameSearchBusy||storeSearch.loading?'aria-busy="true"':''}>${ui.lookupBusy||ui.nameSearchBusy||storeSearch.loading?'<span class="spinner"></span> 검색 중':icon('search')+' 검색하기'}</button>
         </div>
         <div id="lookup-error" class="field-error" role="alert">${esc(ui.lookupError)}</div>
       </form>
-      <div class="lookup-search-note"><p id="lookup-hint">이름 일부 포함 검색 · <strong>${esc(searchScope)}</strong></p><details class="lookup-scope" id="lookup-scope-info"><summary>검색 범위·갱신</summary><div><p>공개자료 ${number(index.publicCount)}곳 · 내 저장정보 ${number(index.savedCount)}곳. 같은 사업자번호를 합친 검색 대상은 ${number(index.totalCount)}곳입니다.</p><p>전국 모든 사업자의 상호가 수집된 것은 아닙니다. 이름의 앞·중간·끝 어디에 검색어가 포함되어도 찾습니다. 저장된 별칭과 동일 사업자번호로 확인된 공개 상호도 검색합니다.</p><p>예: <strong>이버</strong> → 네이버, <strong>박속</strong> → 서해박속낙지전문점. <strong>%네이버%</strong>·<strong>*네이버*</strong>도 지원하며, <strong>서해%전문점</strong>처럼 중간 글자를 생략할 수 있습니다.</p><p>상호 일부와 지역을 함께 입력할 수 있고, 번호는 하이픈 없이 입력해도 됩니다. 숫자만으로 된 상호는 검색 기준을 상호·업체명으로 바꿔 주세요. 초성·오타 보정은 지원하지 않습니다.</p><div class="search-data-highlights"><span>공개자료 수집 일정<strong>매일 06:17 (한국시간)</strong></span><span>공개 목록 생성<strong>${esc(fmtTime(publicMeta.generatedAt||publicMeta.collectedAt))}</strong></span></div><a class="text-button" href="./#data" data-nav="data">전체 데이터 현황 ${icon('chevron')}</a></div></details></div>
+      <div class="lookup-search-note"><p id="lookup-hint">이름 일부 포함 검색 · <strong>${esc(storeScope)}</strong> · ${esc(searchScope)}</p><details class="lookup-scope" id="lookup-scope-info"><summary>검색 범위·갱신</summary><div><p>전국 상가 ${number(storeManifest?.acceptedCount||0)}곳 · 원천 기준일 ${esc(storeManifest?.sourceDate||'확인 중')}. 상호 일부로 찾고 주소·업종을 확인할 수 있습니다. 상가업소번호는 사업자등록번호와 다른 번호이며 이 명부에는 사업자번호가 없습니다.</p><p>사업자번호가 연결된 공개자료 ${number(index.publicCount)}곳 · 내 저장정보 ${number(index.savedCount)}곳. 같은 사업자번호를 합친 검색 대상은 ${number(index.totalCount)}곳입니다.</p><p>전국 모든 사업자의 상호가 수집된 것은 아닙니다. 이름의 앞·중간·끝 어디에 검색어가 포함되어도 찾습니다. 저장된 별칭과 동일 사업자번호로 확인된 공개 상호도 검색합니다.</p><p>예: <strong>이버</strong> → 네이버, <strong>박속</strong> → 서해박속낙지전문점. <strong>%네이버%</strong>·<strong>*네이버*</strong>도 지원하며, <strong>서해%전문점</strong>처럼 중간 글자를 생략할 수 있습니다.</p><p>상호 일부와 지역을 함께 입력할 수 있고, 번호는 하이픈 없이 입력해도 됩니다. 숫자만으로 된 상호는 검색 기준을 상호·업체명으로 바꿔 주세요. 초성·오타 보정은 지원하지 않습니다.</p><div class="search-data-highlights"><span>공개자료 수집 일정<strong>매일 06:17 (한국시간)</strong></span><span>공개 목록 생성<strong>${esc(fmtTime(publicMeta.generatedAt||publicMeta.collectedAt))}</strong></span></div><a class="text-button" href="./#data" data-nav="data">전체 데이터 현황 ${icon('chevron')}</a></div></details></div>
     </section>
-    ${selectedContext?`<div id="lookup-search-context" class="lookup-results-context"><span><strong>“${esc(ui.nameQuery)}”</strong> 검색 결과 ${number(search.result.total)}곳</span><button id="toggle-name-results" class="text-button" data-action="toggle-name-results" aria-controls="lookup-name-results-area" aria-expanded="${showResults}">${showResults?'결과 목록 접기':'결과 다시 보기'} ${icon('chevron')}</button></div>`:''}
+    ${selectedContext?`<div id="lookup-search-context" class="lookup-results-context"><span><strong>“${esc(ui.nameQuery)}”</strong> 검색 결과</span><button id="toggle-name-results" class="text-button" data-action="toggle-name-results" aria-controls="lookup-name-results-area" aria-expanded="${showResults}">${showResults?'결과 목록 접기':'결과 다시 보기'} ${icon('chevron')}</button></div>`:''}
     ${ui.nameQuery?`<div id="lookup-name-results-area" class="lookup-results ${showResults?'is-expanded':''}" ${showResults?'':'hidden'}>${showResults?nameSearchView():''}</div>`:''}
     ${ui.lookupBusy&&!ui.lookup?`<div class="lookup-progress" role="status"><span class="spinner"></span><div><strong>${esc(formatBusinessNumber(ui.lookupPendingNumber))}</strong><p>선택한 번호의 등록 상태와 공개정보를 확인하고 있습니다.</p></div></div>`:''}
-    ${ui.lookup?lookupResultView():''}
+    ${storeSearch.selected?renderStoreCatalogDetail({entry:storeSearch.selected,manifest:storeManifest}):ui.lookup?lookupResultView():''}
     ${!hasActivity?lookupStartView():''}
   </div>`;
 }
 function lookupStartView() {
   const saved=workspace.partners.slice(0,3);
-  return `<section class="lookup-start" aria-label="검색 안내"><div class="lookup-start-icon">${icon('building')}</div><h2>확인할 사업자를 검색하세요</h2><p>상호로 업체를 선택하거나, 사업자번호로 바로 조회할 수 있습니다.</p><span>등록 상태 · 사업자 정보 · 출처와 확인 기록</span></section>
+  return `<section class="lookup-start" aria-label="검색 안내"><div class="lookup-start-icon">${icon('building')}</div><h2>확인할 사업자를 검색하세요</h2><p>상호 일부로 전국 상가를 찾고 주소·업종을 살펴보세요.</p><span>사업자번호가 있으면 등록 상태·과세유형도 확인할 수 있습니다.</span></section>
     ${saved.length?`<section class="lookup-saved" aria-labelledby="lookup-saved-title"><div class="section-row"><h2 id="lookup-saved-title">저장한 거래처</h2><a class="text-button" href="./#partners" data-nav="partners">전체 ${number(workspace.partners.length)}곳 보기 ${icon('chevron')}</a></div><ul class="lookup-saved-list">${saved.map(p=>{const linked=linkedBusiness(p.businessNumber,p);return `<li><button type="button" data-action="lookup-saved" data-bno="${esc(p.businessNumber)}"><span class="company-avatar" aria-hidden="true">${esc(linked.displayName.slice(0,1))}</span><span class="lookup-saved-name"><strong>${esc(linked.displayName)}</strong><small class="number">${formatBusinessNumber(p.businessNumber)}</small></span><span class="lookup-saved-status">${badge(p.lastCheck)}<small>${p.lastCheck?'확인 '+esc(fmtTime(p.lastCheck.checkedAt)):'아직 조회 전'}</small></span>${icon('chevron')}</button></li>`;}).join('')}</ul></section>`:''}`;
 }
 function businessSearchIndex() {
@@ -465,9 +471,54 @@ function currentNameSearch() {
 function nameSearchView() {
   if(!ui.nameQuery)return '';
   const {index,result}=currentNameSearch();
-  return renderBusinessSearch({query:ui.nameQuery,index,result,loading:ui.nameSearchBusy,error:ui.nameSearchError||publicIndexError,
-    meta:publicMeta,selectedNumber:ui.lookupSelection?.businessNumber||''});
+  const known=result.total||ui.nameSearchBusy||ui.nameSearchError?renderBusinessSearch({query:ui.nameQuery,index,result,loading:ui.nameSearchBusy,error:ui.nameSearchError,
+    meta:publicMeta,selectedNumber:ui.lookupSelection?.businessNumber||''}):'';
+  return `${known}<div id="store-search-area">${renderStoreCatalogSearch({...storeSearch,manifest:storeManifest,selectedId:storeSearch.selected?.id})}</div>`;
 }
+function resetStoreSearch() {
+  storeSerial++;storeClient.cancel();
+  storeSearch={query:'',result:null,loading:false,error:'',regionCode:'',selected:null,page:1};
+}
+async function refreshStoreMetadata({force=false}={}) {
+  if(storeMetadataPromise)return storeMetadataPromise;
+  storeMetadataLoading=true;
+  storeMetadataPromise=(async()=>{
+    try {
+      storeManifest=await storeClient.loadManifest({force});storeMetadataError='';
+    } catch(error) {storeMetadataError=error.message;}
+    try {
+      const response=await fetch('./data/store-catalog-status.json',{cache:'no-cache',signal:AbortSignal.timeout(15000)});
+      if(response.ok)storeStatus=await response.json();
+    } catch { /* A catalog can still be searched if only status is unavailable. */ }
+    storeMetadataLoading=false;storeMetadataPromise=null;render();
+  })();
+  return storeMetadataPromise;
+}
+function renderStoreProgress() {
+  if(lookupComposing){renderAfterComposition=true;return;}
+  const area=document.getElementById('store-search-area');
+  // Do not replace a select that the user is operating, or the search input.
+  if(area && !area.contains(document.activeElement))area.innerHTML=renderStoreCatalogSearch({...storeSearch,manifest:storeManifest});
+}
+async function searchStoreCatalog(query,{regionCode=storeSearch.regionCode,refresh=false}={}) {
+  const serial=++storeSerial;
+  storeClient.cancel();
+  storeSearch={query,result:null,loading:true,error:'',regionCode,selected:null,page:1};render();
+  try {
+    if(refresh)await refreshStoreMetadata({force:true});
+    const manifest=await storeClient.loadManifest();
+    if(serial!==storeSerial)return;
+    storeManifest=manifest;storeMetadataError='';
+    const result=await storeClient.search(query,{regionCode,onProgress:result=>{
+      if(serial!==storeSerial)return;storeSearch.result=result;renderStoreProgress();
+    }});
+    if(serial!==storeSerial)return;storeSearch.result=result;
+  } catch(error) {
+    if(serial!==storeSerial||error.name==='AbortError')return;
+    storeSearch.error=error.message;
+  } finally {if(serial===storeSerial){storeSearch.loading=false;render();}}
+}
+
 function lookupResultView() {
   const result=ui.lookup;
   const registered=byNumber(result.businessNumber);
@@ -605,6 +656,7 @@ function dataView() {
   return pageHeading('데이터는 투명하게, 판단은 정확하게','실제 연결 상태와 수집 결과, 데이터의 출처·기준일을 확인하세요.',`<div class="button-row"><button class="button" data-action="refresh-health">${icon('refresh')} 상태 새로고침</button></div>`)+`
   <div class="callout">${icon('info')}<span>API 설정 여부와 실제 조회 성공은 다릅니다. 개별 사업자 화면에는 <strong>조회 응답·출처·조회시각</strong>을 함께 표시합니다.</span></div>
   <div class="callout collection-highlight">${icon('clock')}<span><strong>국세청 조회: 조회 버튼을 누를 때 확인</strong><br>원천 정보 갱신은 30분 주기이며 신규 개업자는 1~2일이 걸릴 수 있습니다. 앱의 최근 조회시각과 구분해 확인하세요.</span></div>
+  ${renderStoreCatalogStatus({manifest:storeManifest,status:storeStatus,error:storeMetadataError,loading:storeMetadataLoading})}
   ${publicCollectionView()}
   <div class="section-spacer source-list">${rows.map(r=>`<section class="card source-card"><div><h3>${r.name}</h3><p>${r.description}</p></div><div class="source-status"><span class="badge ${r.tone} dot">${r.value}</span>${external(r.url,'출처','button small')}</div></section>`).join('')}</div>
   <section class="card source-card section-spacer"><div><h3>Firebase · 계정 보관</h3><p>${esc(sync.message)}</p>${authState.user&&cloudReady&&workspace.updatedAt?`<p>마지막 서버 확인 · ${esc(fmtTime(workspace.updatedAt))}</p>`:''}</div><div class="source-status"><span class="badge ${sync.tone} dot">${esc(sync.label)}</span><a class="button small" href="./#account" data-nav="account">계정 확인</a></div></section>
@@ -974,12 +1026,13 @@ function clearLookupResult(){
 async function submitLookup(value,{refresh=false,type=ui.lookupType}={}){
   if(lookupComposing)return;
   const parsed=classifyBusinessQuery(value,{type});
-  if(ui.nameSearchBusy&&parsed.kind==='name'&&ui.nameQuery===parsed.query)return;
+  if((ui.nameSearchBusy||storeSearch.loading)&&!refresh&&parsed.kind==='name'&&ui.nameQuery===parsed.query)return;
   if(ui.lookupBusy&&parsed.kind==='number'&&ui.lookupPendingNumber===parsed.businessNumber)return;
   if(parsed.kind==='number'&&ui.lookup?.businessNumber===parsed.businessNumber){
     ui.lookupQuery=String(value??'');ui.lookupError='';ui.nameQuery='';ui.nameSearchError='';ui.nameResultsExpanded=false;
     await lookup(parsed.businessNumber,{preserveContext:true});return;
   }
+  resetStoreSearch();
   const serial=++lookupSerial;
   interactionEpoch++;
   const interaction=interactionEpoch;
@@ -991,6 +1044,7 @@ async function submitLookup(value,{refresh=false,type=ui.lookupType}={}){
   }
   if(parsed.kind==='number'){await lookup(parsed.businessNumber);return;}
   ui.nameQuery=parsed.query;ui.nameSearchBusy=true;render();
+  const storeTask=searchStoreCatalog(parsed.query,{refresh});
   try{if(!await refreshPublicIndex({force:refresh}))throw new Error(publicIndexError);}
   catch{
     if(serial!==lookupSerial)return;
@@ -998,11 +1052,14 @@ async function submitLookup(value,{refresh=false,type=ui.lookupType}={}){
   }finally{
     if(serial===lookupSerial){
       ui.nameSearchBusy=false;render();
-      if(interaction===interactionEpoch&&!lookupComposing&&!modal&&ui.view==='lookup'&&ui.lookupQuery===String(value??''))document.getElementById('name-results-title')?.focus({preventScroll:true});
+      if(interaction===interactionEpoch&&!lookupComposing&&!modal&&ui.view==='lookup'&&ui.lookupQuery===String(value??''))(document.getElementById('name-results-title')||document.getElementById('store-results-title'))?.focus({preventScroll:true});
     }
   }
+  await storeTask;
 }
 async function lookup(value,{candidate=null,preserveContext=false}={}) {
+  if(!candidate&&!preserveContext)resetStoreSearch();
+  else {storeSerial++;storeClient.cancel();storeSearch.loading=false;storeSearch.selected=null;}
   const bno=normalizeBusinessNumber(value);
   if(ui.lookupBusy&&ui.lookupPendingNumber===bno)return;
   const previousNumber=ui.lookup?.businessNumber||ui.lookupPendingNumber;
@@ -1201,7 +1258,9 @@ document.addEventListener('change',async event=>{
   const t=event.target;
   if(t.id==='detail-history-period'){updateDetailHistory({period:t.value});return;}
   if(t.id==='detail-history-sort'){updateDetailHistory({sort:t.value});return;}
+  if(t.id==='store-region-filter'){interactionEpoch++;await searchStoreCatalog(ui.nameQuery,{regionCode:t.value});return;}
   if(t.id==='lookup-type'){
+    resetStoreSearch();
     lookupSerial++;interactionEpoch++;ui.lookupType=t.value;ui.lookupError='';ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';clearLookupResult();
     render();document.getElementById('business-query')?.focus({preventScroll:true});return;
   }
@@ -1309,7 +1368,7 @@ document.addEventListener('click',async event=>{
   }
   if(action==='toggle-name-results'){
     interactionEpoch++;ui.nameResultsExpanded=!ui.nameResultsExpanded;render();
-    const target=document.getElementById(ui.nameResultsExpanded?'name-results-title':'toggle-name-results');
+    const target=document.getElementById(ui.nameResultsExpanded?'name-results-title':'toggle-name-results')||(ui.nameResultsExpanded?document.getElementById('store-results-title'):null);
     target?.focus({preventScroll:true});target?.scrollIntoView({block:'nearest',behavior:'instant'});
     return;
   }
@@ -1322,7 +1381,18 @@ document.addEventListener('click',async event=>{
     const target=document.getElementById('name-results-title')||document.getElementById('business-query');
     target?.focus({preventScroll:true});target?.scrollIntoView({block:'nearest',behavior:'instant'});return;
   }
+  if(action==='select-store-result'){
+    const entry=storeSearch.result?.results.find(item=>item.id===element.dataset.id);
+    if(entry){lookupSerial++;interactionEpoch++;clearLookupResult();storeSearch.selected=entry;render();document.getElementById('store-detail-title')?.focus({preventScroll:true});}
+    return;
+  }
+  if(action==='return-store-results'){interactionEpoch++;storeSearch.selected=null;render();document.getElementById('store-results-title')?.focus({preventScroll:true});return;}
+  if(action==='retry-store-search'){if(ui.nameQuery)await searchStoreCatalog(ui.nameQuery,{refresh:true});return;}
+  if(action==='store-search-prev'||action==='store-search-next'){
+    interactionEpoch++;storeSearch.page=Math.max(1,storeSearch.page+(action==='store-search-next'?1:-1));render();document.getElementById('store-results-title')?.focus({preventScroll:true});return;
+  }
   if(action==='select-name-result'){
+    storeSerial++;storeClient.cancel();storeSearch.loading=false;storeSearch.selected=null;
     const candidate=currentNameSearch().result.results.find(entry=>entry.businessNumber===element.dataset.number);
     if(candidate&&ui.lookup?.businessNumber===candidate.businessNumber){
       interactionEpoch++;ui.nameResultsExpanded=false;render();const target=document.getElementById('lookup-result-title');target?.focus({preventScroll:true});target?.scrollIntoView({block:'nearest',behavior:'instant'});
@@ -1334,6 +1404,7 @@ document.addEventListener('click',async event=>{
     interactionEpoch++;ui.nameSearchPage=Math.max(1,ui.nameSearchPage+(action==='name-search-next'?1:-1));render();document.getElementById('name-results-title')?.focus({preventScroll:true});return;
   }
   if(action==='search-by-number'){
+    resetStoreSearch();
     lookupSerial++;interactionEpoch++;clearLookupResult();ui.lookupType='number';ui.lookupQuery='';ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';ui.lookupError='';
     render();document.getElementById('business-query')?.focus({preventScroll:true});return;
   }
@@ -1432,7 +1503,7 @@ document.addEventListener('click',async event=>{
     const events=workspace.events.map(e=>(action==='acknowledge-all'||e.id===id)&&!e.acknowledgedAt?{...e,acknowledgedAt:new Date().toISOString()}:e);
     if(await persist({...workspace,events}))toast('확인한 기록으로 표시했습니다.');return;
   }
-  if(action==='refresh-health'){await Promise.allSettled([checkHealth(),refreshPublicIndex({force:true})]);return;}
+  if(action==='refresh-health'){await Promise.allSettled([checkHealth(),refreshPublicIndex({force:true}),refreshStoreMetadata({force:true})]);return;}
   if(action==='connection-settings'){connectionModal();return;}
   if(action==='validate-open'){validateModal();return;}
   if(action==='privacy'){privacyModal();return;}
@@ -1479,5 +1550,5 @@ catch(error){storageError='이 브라우저에서 기록을 불러오지 못했�
 if(!titles[ui.view])ui.view='lookup';
 render();
 authClient=createAuthClient({publicConfig:window.BIZHANNUN_CONFIG?.auth,apiBase:window.BIZHANNUN_CONFIG?.apiBase||'',onStateChange:receiveAuthState});
-Promise.allSettled([checkHealth(),refreshPrograms(),refreshPublicIndex(),authClient.init()]);
+Promise.allSettled([checkHealth(),refreshPrograms(),refreshPublicIndex(),refreshStoreMetadata(),authClient.init()]);
 

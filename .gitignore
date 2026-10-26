@@ -11,3 +11,6 @@ test-results/
 src/firebase-sdk.mjs
 .firebase/
 *-debug.log
+
+__pycache__/
+data/store-catalog/.*
