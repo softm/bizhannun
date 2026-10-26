@@ -38,7 +38,7 @@ jobs:
        (startsWith(github.event.issue.title, '[사업자 수집]') &&
         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)))
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     permissions:
       contents: write
     steps:
@@ -64,7 +64,9 @@ jobs:
         run: npm run check
 
       - name: Test behavior
-        run: npm test
+        run: |
+          npm test
+          python3 -m unittest discover -s tests -p '*_test.py'
 
       - name: Register explicit public business collection request
         env:
@@ -84,6 +86,9 @@ jobs:
           KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
         run: node scripts/collect-businesses.mjs
 
+      - name: Refresh official nationwide store catalog
+        run: python3 scripts/collect-store-catalog.py
+
       - name: Refresh public support program data
         # Expected upstream failures are recorded by the collector while the
         # last successful snapshot stays intact. A broken collector still fails.
@@ -98,13 +103,13 @@ jobs:
             echo "main changed during validation. Stop without merging or overwriting; run again against the new main."
             exit 1
           fi
-          git add -- 'data/*.json' 'data/enrichment/index.json' 'config/business-sources.json'
+          git add -- 'data/*.json' 'data/enrichment/index.json' 'config/business-sources.json' 'data/store-catalog/'
           if git diff --cached --quiet; then
             echo "Public evidence and data are unchanged."
             exit 0
           fi
           while IFS= read -r path; do
-            if [[ ! "$path" =~ ^data/[^/]+\.json$ && "$path" != "data/enrichment/index.json" && "$path" != "config/business-sources.json" ]]; then
+            if [[ ! "$path" =~ ^data/[^/]+\.json$ && "$path" != "data/enrichment/index.json" && "$path" != "config/business-sources.json" && ! "$path" =~ ^data/store-catalog/(manifest\.json|routing\.json\.gz|shards/[0-9-]+\.json\.gz)$ ]]; then
               echo "Refusing to commit a file outside the public data allowlist."
               exit 1
             fi
@@ -115,6 +120,9 @@ jobs:
           # A concurrent push is rejected normally. Never rebase or force-push
           # code that has not passed this run's tests.
           git push origin HEAD:main
+
+      - name: Validate every published store catalog file
+        run: node scripts/validate-store-catalog.mjs
 
       - name: Build public website
         env:

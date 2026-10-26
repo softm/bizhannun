@@ -457,3 +457,14 @@ v0.2는 Firebase UID별 업무 정보 보관과 로그인 전 기기 자료의 �
 국세청 상태 조회는 Production 인증키 등록·재배포와 실제 단건 API 응답·Pages 화면 확인을 완료했습니다. 공정위 원천 조회는 아직 인증키 설정과 실제 응답 확인이 필요합니다. 활용신청만으로 Vercel에 인증키가 등록되는 것은 아닙니다. 새 환경 구성·키 교체 시에는 [AUTH_SETUP.md](AUTH_SETUP.md)의 등록·재배포·실제 조회 확인 절차를 따릅니다.
 
 Pages 공개 목록 수집·배포는 매일 한국 시간 06:17로 예약되어 있습니다. Vercel은 소스 직접 배포 방식이며 GitHub App 연동이 없어 Git push만으로 API가 갱신되지는 않습니다. Firestore 규칙 역시 Pages 배포와 별도로 대상 데이터베이스에 적용합니다.
+
+## 2026-10-27 — v0.6 nationwide store name search
+
+- Source: official SEMAS CSV ZIP `소상공인시장진흥공단_상가(상권)정보_20260630.zip`, 352,699,739 bytes. Provenance and SHA-256 in the catalog manifest.
+- Imported 2,772,484 source rows into 2,772,484 store records. Rejected and duplicate rows: 0. All 16 source region codes present, including 전남광주 (12).
+- Independently verified all 1,159 gzip shards and routing index: SHA-256, compressed/decoded byte lengths, tuple fields, per-shard counts, region totals and overall total.
+- `npm run check`, `npm run build`: passed. Public build contains 1,200 files; source ZIP and temporary import files excluded.
+- `npm test`: 371 passed, 0 failures, 1 Firestore-emulator test skipped. Python importer tests: 5 passed.
+- Actual snapshot smoke results: `삼성` 8,569; `%삼성%` 8,569; `스타벅스` 2,154; `광명 서해*전문점` 1; `삼성` with 충남 filter 439. No failed search fragments.
+- Local snapshot search observations (without network latency): broad `삼성` about 13s; `스타벅스` about 1.7s; 충남 `삼성` about 2s. Browser/network performance varies. Progress, interruption by a new query, and region filtering are provided.
+- Store IDs are explicitly separate from business registration numbers. No name-only merge or implicit NTS query for a store result.
