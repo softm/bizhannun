@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "provider": "semas",
+  "schedule": {
+    "label": "매일 06:17에 새 원본 확인 · 변경된 분기 자료 수집",
+    "timezone": "Asia/Seoul",
+    "cron": "17 21 * * *"
+  },
+  "lastAttemptAt": "2026-10-26T17:42:21Z",
+  "lastSuccessAt": "2026-10-26T17:48:26Z",
+  "status": "success",
+  "lastError": "",
+  "sourceDate": "2026-06-30",
+  "acceptedCount": 2772484,
+  "lastCheckedAt": "2026-10-26T17:52:51Z",
+  "version": "57aa361544108ff4fc73"
+}
