@@ -6,11 +6,11 @@
     "timezone": "Asia/Seoul",
     "cron": "17 21 * * *"
   },
-  "lastAttemptAt": "2026-10-26T17:55:23Z",
+  "lastAttemptAt": "2026-10-27T00:27:04Z",
   "lastSuccessAt": "2026-10-26T17:48:26Z",
   "status": "unchanged",
   "lastError": "",
   "sourceDate": "2026-06-30",
   "acceptedCount": 2772484,
-  "lastCheckedAt": "2026-10-26T17:55:26Z"
+  "lastCheckedAt": "2026-10-27T00:27:06Z"
 }
