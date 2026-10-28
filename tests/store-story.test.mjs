@@ -15,7 +15,7 @@ test('store detail provides geolocated map preview and Naver location and photo 
   assert.match(html,/이 지점 사진 검색/);
   assert.match(html,/영업시간·시설·매장 전화/);
   assert.match(html,/현재 영업 여부/);
-  assert.match(html,/출처/);
+  assert.match(html,/사진 원본·저작권 확인/);
 });
 
 test('official Starbucks company identity remains separate from individual store business number',()=>{
