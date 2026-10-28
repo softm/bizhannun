@@ -12,6 +12,7 @@ import { renderBusinessSearch } from './business-search-view.mjs';
 import { createStoreCatalogClient } from './store-catalog-client.mjs';
 import { renderStoreCatalogSearch, renderStoreCatalogDetail, renderStoreCatalogStatus } from './store-catalog-view.mjs';
 import { createLookupOrigin, restoreLookupOrigin } from './lookup-journey.mjs';
+import { operatorEvidenceForStore } from './store-story.mjs';
 import { renderBusinessWorkbench, LOOKUP_TABS, normalizeLookupTab, lookupTabForInsight } from './business-workbench-view.mjs';
 import { renderCollectionDashboard, buildBusinessProfileDraft, evidenceChanges } from './business-dashboard.mjs';
 import { renderBusinessDetail, buildBusinessDetailReport } from './business-detail-view.mjs';
@@ -354,7 +355,7 @@ function shell(content) {
     <nav>${nav}</nav>
     <div class="side-spacer"></div>
     <div class="local-card">${icon('shield')}<div><strong>${authState.user?'내 계정에 보관':'이 기기에 보관'}</strong>${authState.user?esc(accountStorageStatus().label):'로그인하면 다른 기기에서도<br>내 기록을 이어서 볼 수 있어요.'}</div></div>
-    <div class="side-foot"><span>© bizhannun</span><span>v0.7</span></div>
+    <div class="side-foot"><span>© bizhannun</span><span>v0.8</span></div>
   </aside>
   <div class="main-wrap">
     <header class="topbar">
@@ -1447,6 +1448,14 @@ document.addEventListener('click',async event=>{
   if(action==='select-store-result'){
     const entry=storeSearch.result?.results.find(item=>item.id===element.dataset.id);
     if(entry){lookupSerial++;interactionEpoch++;clearLookupResult();storeSearch.selected=entry;render();const title=document.getElementById('store-detail-title');title?.focus({preventScroll:true});title?.scrollIntoView({block:'start',behavior:'instant'});}
+    return;
+  }
+  if(action==='lookup-brand-company'){
+    const brand=operatorEvidenceForStore(storeSearch.selected);
+    if(!brand||element.dataset.bno!==brand.businessNumber)return;
+    changeLookupIntent('number',{fromSearch:true});
+    ui.lookupQuery=brand.businessNumber;ui.lookupDrafts.number=brand.businessNumber;
+    await submitLookup(brand.businessNumber,{type:'number'});
     return;
   }
   if(action==='return-store-results'){interactionEpoch++;storeSearch.selected=null;render();document.getElementById('store-results-title')?.focus({preventScroll:true});return;}
