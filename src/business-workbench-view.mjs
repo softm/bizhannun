@@ -56,7 +56,7 @@ function statusBadge(outcome) {
 }
 function statusNotice(result, outcome) {
   if (outcome.currentConfirmed) return '';
-  return `<p class="callout${outcome.kind === 'error' ? ' warning' : ''}" role="status">${esc(outcome.fact)} ${esc(outcome.meaning)}${outcome.previousRecord ? ` 직전 성공 기록은 ${esc(outcome.previousRecord.label)}(${time(outcome.previousRecord.checkedAt)})이며 현재 상태를 대신하지 않습니다.` : ''}${result.outcome !== 'ok' && result.message ? ` ${esc(result.message)}` : ''}</p>`;
+  return `<p class="callout${outcome.kind === 'error' ? ' warning' : ''}" role="status">${esc(outcome.fact)}${outcome.previousRecord ? ` 직전 성공 기록은 ${esc(outcome.previousRecord.label)}(${time(outcome.previousRecord.checkedAt)})이며 현재 상태를 대신하지 않습니다.` : ' 확인 결과에서 이유와 다음 행동을 확인하세요.'}</p>`;
 }
 function renderHeader({ number, linked, model, outcome, registered, refreshing }) {
   const status = model.status || {};
@@ -64,7 +64,7 @@ function renderHeader({ number, linked, model, outcome, registered, refreshing }
   const sourceCaption = linked.nameSource === 'user'
     ? `저장한 이름 · 사용자 입력${linked.publicName && linked.userName !== linked.publicName ? ` <span>공개 상호 · ${esc(linked.publicName)}</span>` : ''}`
     : linked.publicName ? `상호 출처 · ${sourceLink(linked.nameSourceUrl, linked.nameSourceLabel)} · 수집 ${time(linked.nameCollectedAt)}`
-      : '상호 미확보 · 국세청 상태 조회에는 상호·주소가 포함되지 않습니다.';
+      : '국세청 상태 조회에는 상호·주소가 포함되지 않습니다. 등록증과 함께 확인하세요.';
   const statusCaption = `${outcome.timeLabel} · ${time(outcome.observedAt)}`;
   const priorTax = !!status.taxType && !outcome.currentConfirmed;
   return `<header class="lookup-detail-header">
