@@ -35,8 +35,8 @@ const render = (options = {}) => renderBusinessWorkbench(input(options));
 
 test('tabs use the agreed labels, normalize unknown states and map evidence actions to their section', () => {
   assert.deepEqual(LOOKUP_TABS, [
-    { id: 'overview', label: '요약' }, { id: 'facts', label: '사업자 정보' },
-    { id: 'sources', label: '출처·수집' }, { id: 'history', label: '조회 이력' },
+    { id: 'overview', label: '확인 결과' }, { id: 'facts', label: '업체 정보' },
+    { id: 'sources', label: '자료 출처' }, { id: 'history', label: '확인 기록' },
   ]);
   for (const item of LOOKUP_TABS) assert.equal(normalizeLookupTab(item.id), item.id);
   for (const invalid of [undefined, null, '', 'constructor', '<script>']) assert.equal(normalizeLookupTab(invalid), 'overview');
@@ -69,21 +69,31 @@ test('one selected company has four ARIA panel shells but renders only the activ
   }
 });
 
-test('overview removes duplicate gap and candidate cards and reserves at most two rows for priority actions', () => {
+test('overview leads with a dated fact and one next action, and keeps missing profile data folded away', () => {
   const data = input();
-  const action = index => ({ id: 'priority-' + index, title: '확인 ' + index, description: '설명 ' + index, action: 'insight-view-sources', label: '근거 보기', tone: 'warning' });
   data.model.actions.push({ id: 'candidates', title: '후보 안내 카드', action: 'insight-view-sources', label: '후보' });
-  data.model.actions.unshift(action(1), action(2), action(3));
   const html = renderBusinessWorkbench(data);
-  const firstList = html.match(/<ol class="lookup-actions-list">([\s\S]*?)<\/ol>/)?.[1] || '';
-  assert.equal((firstList.match(/class="lookup-action /g) || []).length, 2);
-  assert.match(html, /id="lookup-more-actions"/);
-  assert.match(html, /data-insight-id="priority-3"/);
+  assert.match(html, /<h3 id="lookup-outcome-title">계속사업자로 확인됐습니다/);
+  assert.match(html, /확인한 시각 · <time datetime="2026-10-21T13:00:00.000Z"/);
+  const factIndex = html.indexOf('id="lookup-outcome-title"');
+  const nextIndex = html.indexOf('class="lookup-next-step"');
+  const supportingIndex = html.indexOf('id="lookup-supporting-info"');
+  assert.ok(factIndex < nextIndex && nextIndex < supportingIndex);
+  const nextStep = html.match(/<section class="lookup-next-step"[\s\S]*?<\/section>/)?.[0] || '';
+  assert.equal((nextStep.match(/<button\b/g) || []).length, 1);
+  assert.match(nextStep, /data-action="validate-registration"/);
+  assert.match(html, /<details id="lookup-supporting-info" class="lookup-supporting-info"><summary>함께 확인할 업체 정보/);
   assert.doesNotMatch(html, /기본정보 1개 항목을 더 확인|후보 안내 카드/);
   assert.match(html, /기본정보 5 \/ 6개 확보/);
   assert.match(html, /미확보 · 공식 웹사이트/);
   assert.match(html, /data-insight-id="registration-cross-check"/);
+  assert.doesNotMatch(html, /data-action="enrichment-request"/);
+  assert.match(html, /확인한 내용을 거래처에 저장/);
   assert.doesNotMatch(html, /class="insight-metric|class="enrichment-panel|통합 정보<\/h2>/);
+  const empty = render({ publicRecord: null });
+  assert.match(empty, /이 번호와 연결된 업체 기본정보가 아직 없습니다/);
+  assert.match(empty, /업체의 신뢰도를 평가한 결과가 아닙니다/);
+  assert.ok(empty.indexOf('기본정보 0 / 6개 확보') > empty.indexOf('<details id="lookup-supporting-info"'));
 });
 
 test('facts always expose six basic fields, preserve alternatives and warn only on comparable conflicts', () => {
@@ -147,21 +157,45 @@ test('sources distinguish collection attempts, retained success, provider access
   for (const action of ['reload-enrichment', 'enrichment-request', 'save-enrichment-note', 'enrichment-export']) {
     assert.match(html, new RegExp('data-action="' + action + '" data-bno="' + BNO + '"'));
   }
+  assert.match(html, /class="text-button" data-action="enrichment-request"[^>]*>공개자료 추가 요청 · GitHub/);
+  assert.match(html, /GitHub의 공개 요청 작성 화면에서 제출/);
 });
 
 test('a failed latest lookup clearly keeps the prior successful status and its original time', () => {
   const lastSuccess = status({ checkedAt: OLD });
   const failure = status({ outcome: 'error', businessStatus: 'unknown', taxType: '', message: '일시적인 연결 오류입니다.' });
   const html = render({ result: failure, partner: { businessNumber: BNO, lastSuccess, lastCheck: failure, history: [failure, lastSuccess] } });
-  assert.match(html, /직전 성공 · 계속사업자/);
-  assert.match(html, /직전 정상 조회 · <time datetime="2026-10-11T10:00:00.000Z"/);
-  assert.match(html, /최근 상태 조회\(<time datetime="2026-10-21T13:00:00.000Z"/);
-  assert.match(html, /표시된 상태와 과세유형은 직전 성공 시점의 기록/);
+  assert.match(html, /이번 조회를 완료하지 못했습니다/);
+  assert.match(html, /직전 성공 기록 · 계속사업자/);
+  assert.match(html, /<time datetime="2026-10-11T10:00:00.000Z"/);
+  assert.match(html, /마지막 조회 시도 · <time datetime="2026-10-21T13:00:00.000Z"/);
+  assert.match(html, /이전 상태와 과세유형입니다. 현재 상태를 확인한 결과가 아닙니다/);
   assert.match(html, /일시적인 연결 오류입니다/);
   assert.match(html, /부가가치세 일반과세자/);
+  assert.doesNotMatch(html, /badge positive dot|계속사업자로 확인됐습니다/);
   const noSuccess = render({ result: failure, publicRecord: null });
   assert.match(noSuccess, /조회 실패 · 상태 미확인/);
   assert.doesNotMatch(noSuccess, /계속사업자|직전 성공 ·/);
+});
+
+test('no registration result requests number correction while connection failures request a retry', () => {
+  for (const outcome of ['not_found', 'not_configured', 'error']) {
+    const html = render({ result: status({ outcome, businessStatus: 'unknown', taxType: '' }), publicRecord: null });
+    const nextStep = html.match(/<section class="lookup-next-step"[\s\S]*?<\/section>/)?.[0] || '';
+    assert.match(nextStep, new RegExp('data-action="' + (outcome === 'not_found' ? 'edit-lookup-number' : 'insight-refresh-status') + '"'));
+    assert.match(nextStep, /data-bno="6901100416"/);
+    assert.doesNotMatch(html, /badge positive dot|조회 결과는 폐업자|계속사업자로 확인됐습니다|data-action="enrichment-request"/);
+  }
+});
+
+test('stale status and collection failures have separate meanings and never become a current green status', () => {
+  const html = render({ result: status({ checkedAt: OLD }), publicRecord: record({ collection: { status: 'partial', lastAttemptAt: STAMP } }) });
+  assert.match(html, /이전 조회 기록은 계속사업자입니다/);
+  assert.match(html, /마지막 정상 조회 후 7일을 넘겼습니다/);
+  assert.match(html, /수집 문제를 업체 상태 변화로 판단하지 않습니다/);
+  assert.doesNotMatch(html, /badge positive dot|계속사업자로 확인됐습니다|data-action="enrichment-request"/);
+  const nextStep = html.match(/<section class="lookup-next-step"[\s\S]*?<\/section>/)?.[0] || '';
+  assert.match(nextStep, /data-action="insight-refresh-status"/);
 });
 
 test('refresh preserves selected context while disabling retry actions and keeping disclosure IDs stable', () => {

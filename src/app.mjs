@@ -11,6 +11,7 @@ import { classifyBusinessQuery, buildBusinessSearchIndex, searchBusinesses } fro
 import { renderBusinessSearch } from './business-search-view.mjs';
 import { createStoreCatalogClient } from './store-catalog-client.mjs';
 import { renderStoreCatalogSearch, renderStoreCatalogDetail, renderStoreCatalogStatus } from './store-catalog-view.mjs';
+import { createLookupOrigin, restoreLookupOrigin } from './lookup-journey.mjs';
 import { renderBusinessWorkbench, LOOKUP_TABS, normalizeLookupTab, lookupTabForInsight } from './business-workbench-view.mjs';
 import { renderCollectionDashboard, buildBusinessProfileDraft, evidenceChanges } from './business-dashboard.mjs';
 import { renderBusinessDetail, buildBusinessDetailReport } from './business-detail-view.mjs';
@@ -115,9 +116,10 @@ let importSelection = 0;
 const selected = new Set();
 const ui = {
   view: document.body.dataset.page === 'data' ? 'data' : (location.hash.slice(1).split('?')[0] || 'lookup'),
-  enrichment:null, enrichmentBusy:false, enrichmentError:'', mode: 'partner', lookupQuery: '', lookupType:'auto', lookupError:'', lookup: null, commerce: null, lookupBusy: false,
+  enrichment:null, enrichmentBusy:false, enrichmentError:'', mode: 'partner', lookupQuery: '', lookupType:'name', lookupError:'', lookup: null, commerce: null, lookupBusy: false,
   nameQuery:'', nameSearchBusy:false, nameSearchError:'', nameSearchPage:1, lookupSelection:null,
   lookupTab:'overview', lookupPendingNumber:'', nameResultsExpanded:false,
+  lookupOrigin:null, lookupDrafts:{name:'',number:''}, lookupNumberOriginKey:'', lookupSavedNumber:'',
   partnerQuery: '', partnerStatus: 'all', partnerInsight:'all', programQuery: '', programCategory: '', openOnly: true,
   page: 1, profileDraft: null, batchBusy: false, batchDone: 0, batchTotal: 0, mobileMenu: false
 };
@@ -210,6 +212,7 @@ async function switchAccount(uid){
   ui.lookup=null;ui.lookupBusy=false;ui.commerce=null;ui.profileDraft=null;
   ui.lookupQuery='';ui.lookupError='';ui.lookupSelection=null;ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';ui.nameSearchPage=1;
   ui.lookupTab='overview';ui.lookupPendingNumber='';ui.nameResultsExpanded=false;
+  ui.lookupOrigin=null;ui.lookupDrafts={name:'',number:''};ui.lookupNumberOriginKey='';ui.lookupSavedNumber='';ui.lookupType='name';
   ui.enrichment=null;ui.enrichmentBusy=false;ui.enrichmentError='';businessIndexCache=null;
   ui.batchBusy=false;selected.clear();if(modal)closeModal({discardDraft:true,quiet:true});detailDrafts.clear();
   workspace={...emptyWorkspace(),preferences:guestWorkspace.preferences};render();
@@ -351,7 +354,7 @@ function shell(content) {
     <nav>${nav}</nav>
     <div class="side-spacer"></div>
     <div class="local-card">${icon('shield')}<div><strong>${authState.user?'내 계정에 보관':'이 기기에 보관'}</strong>${authState.user?esc(accountStorageStatus().label):'로그인하면 다른 기기에서도<br>내 기록을 이어서 볼 수 있어요.'}</div></div>
-    <div class="side-foot"><span>© bizhannun</span><span>v0.6</span></div>
+    <div class="side-foot"><span>© bizhannun</span><span>v0.7</span></div>
   </aside>
   <div class="main-wrap">
     <header class="topbar">
@@ -421,38 +424,57 @@ function portfolioView() {
   return `<section class="card portfolio-panel" aria-label="거래처 점검"><div class="card-header"><div><h2>거래처 점검</h2><p class="fine-print">${number(workspace.partners.length)}곳의 확인 기록과 공개자료를 함께 살펴봅니다.</p></div><button class="text-button" data-action="insight-filter" data-filter="all">전체 거래처 ${icon('chevron')}</button></div><div class="portfolio-grid">${options.map(([key,label,count,desc,symbol])=>`<button class="portfolio-metric ${ui.partnerInsight===key&&ui.view==='partners'?'is-selected':''}" data-action="insight-filter" data-filter="${key}" aria-label="${label} ${count}곳 보기"><span>${icon(symbol)}${label}</span><strong>${count}<small>곳</small></strong><p>${desc}</p></button>`).join('')}</div><p class="portfolio-note">확인할 정보의 범위입니다. 업체의 신용등급이나 거래 안전성을 평가한 수치가 아닙니다.</p>${publicIndexError?`<p class="insight-notice is-attention">${esc(publicIndexError)}</p>`:''}</section>`;
 }
 function lookupView() {
-  const hasActivity=!!(ui.nameQuery||ui.lookup||ui.lookupBusy||storeSearch.query);
+  const numberMode=ui.lookupType==='number';
+  const hasActivity=!!(ui.nameQuery||ui.lookup||ui.lookupBusy||storeSearch.query||ui.lookupOrigin);
   const selectedContext=!!ui.nameQuery&&!!(ui.lookup||ui.lookupBusy||storeSearch.selected);
   const showResults=!selectedContext||ui.nameResultsExpanded;
   const index=businessSearchIndex();
-  const searchScope=!publicIndexLoaded&&!publicIndexError?'공개목록 불러오는 중':publicIndexError?'공개목록 연결 확인 필요':`번호 연결 ${number(index.totalCount)}곳`;
-  const storeScope=storeManifest?`전국 상가 ${number(storeManifest.acceptedCount)}곳`:storeMetadataLoading?'전국 상가 목록 확인 중':'전국 상가 목록 연결 확인 필요';
+  const busy=ui.lookupBusy||ui.nameSearchBusy||storeSearch.loading;
+  const saved=ui.lookupSavedNumber&&byNumber(ui.lookupSavedNumber);
   return `<div class="lookup-page">
-    <header class="lookup-heading"><h1>사업자 조회</h1><p>상호 일부로 전국 상가를 찾거나, 사업자번호로 등록 상태를 확인하세요.</p></header>
+    <header class="lookup-heading"><span class="lookup-eyebrow">업체 찾기부터 거래처 기록까지</span><h1>어떤 정보를 확인할까요?</h1><p>알고 있는 정보에 맞춰 시작하세요. 결과를 확인하고 다음 행동까지 이어갑니다.</p></header>
     <section class="card lookup-search" aria-label="사업자 이름 또는 등록번호 조회">
-      <form id="lookup-form" role="search" aria-label="사업자 검색">
+      <div class="lookup-intents" role="group" aria-label="확인할 정보 선택">
+        <button type="button" id="lookup-intent-name" class="lookup-intent ${numberMode?'':'is-active'}" data-action="lookup-intent" data-intent="name" aria-pressed="${!numberMode}"><span class="lookup-intent-icon">${icon('search')}</span><span><strong>이름으로 업체 찾기</strong><small>상호·주소·업종 확인</small></span><span class="lookup-intent-check" aria-hidden="true">${!numberMode?icon('check'):''}</span></button>
+        <button type="button" id="lookup-intent-number" class="lookup-intent ${numberMode?'is-active':''}" data-action="lookup-intent" data-intent="number" aria-pressed="${numberMode}"><span class="lookup-intent-icon">${icon('shield')}</span><span><strong>번호로 등록 상태 확인</strong><small>국세청 휴·폐업·과세유형 확인</small></span><span class="lookup-intent-check" aria-hidden="true">${numberMode?icon('check'):''}</span></button>
+      </div>
+      <p class="lookup-intent-description">${numberMode?'사업자등록번호로 국세청에 등록된 상태를 확인합니다. 상호·주소는 이 조회에 포함되지 않습니다.':'공개 상가 명부와 내 저장정보에서 업체를 찾습니다. 휴·폐업 확인에는 사업자등록번호가 필요합니다.'}</p>
+      ${lookupOriginView()}
+      <form id="lookup-form" role="search" aria-label="${numberMode?'사업자 등록 상태 확인':'업체 이름 검색'}">
+        <label class="lookup-input-label" for="business-query">${numberMode?'사업자등록번호':'업체 이름'}</label>
         <div class="lookup-input-row">
-          <label class="sr-only" for="lookup-type">검색 기준</label>
-          <select id="lookup-type" name="lookupType"><option value="auto" ${ui.lookupType==='auto'?'selected':''}>자동 구분</option><option value="name" ${ui.lookupType==='name'?'selected':''}>상호·업체명</option><option value="number" ${ui.lookupType==='number'?'selected':''}>사업자번호</option></select>
-          <label class="sr-only" for="business-query">사업자등록번호 또는 상호·업체명</label>
-          <input id="business-query" name="businessQuery" type="search" inputmode="${ui.lookupType==='number'?'numeric':'search'}" autocomplete="off" enterkeyhint="search" spellcheck="false" placeholder="${ui.lookupType==='number'?'사업자등록번호 10자리':'상호 일부 또는 사업자등록번호 10자리'}" value="${esc(ui.lookupQuery)}" maxlength="200" aria-describedby="lookup-error lookup-hint" ${ui.lookupError?'aria-invalid="true"':''} required>
-          <button class="button primary" type="submit" ${ui.lookupBusy||ui.nameSearchBusy||storeSearch.loading?'aria-busy="true"':''}>${ui.lookupBusy||ui.nameSearchBusy||storeSearch.loading?'<span class="spinner"></span> 검색 중':icon('search')+' 검색하기'}</button>
+          <input id="business-query" name="businessQuery" type="search" inputmode="${numberMode?'numeric':'search'}" autocomplete="off" enterkeyhint="search" spellcheck="false" placeholder="${numberMode?'사업자등록번호 10자리':'예: 스타벅스, 서해박속'}" value="${esc(ui.lookupQuery)}" maxlength="${numberMode?'20':'200'}" aria-describedby="lookup-error lookup-hint" ${ui.lookupError?'aria-invalid="true"':''} required>
+          <button class="button primary" type="submit" ${busy?'aria-busy="true"':''}>${busy?'<span class="spinner"></span> '+(numberMode?'조회 중':'검색 중'):icon(numberMode?'shield':'search')+(numberMode?' 등록 상태 확인':' 업체 찾기')}</button>
         </div>
         <div id="lookup-error" class="field-error" role="alert">${esc(ui.lookupError)}</div>
+        <div class="lookup-input-help"><p id="lookup-hint">${numberMode?'하이픈 없이 입력해도 됩니다. 상가업소번호와는 다른 번호입니다.':'이름 일부로도 찾을 수 있어요. 검색 후 지역을 선택해 범위를 좁혀 보세요.'}</p>${numberMode?'<button type="button" class="text-button" data-action="number-help">사업자번호를 모르시나요?</button>':''}</div>
       </form>
-      <div class="lookup-search-note"><p id="lookup-hint">이름 일부 포함 검색 · <strong>${esc(storeScope)}</strong> · ${esc(searchScope)}</p><details class="lookup-scope" id="lookup-scope-info"><summary>검색 범위·갱신</summary><div><p>전국 상가 ${number(storeManifest?.acceptedCount||0)}곳 · 원천 기준일 ${esc(storeManifest?.sourceDate||'확인 중')}. 상호 일부로 찾고 주소·업종을 확인할 수 있습니다. 상가업소번호는 사업자등록번호와 다른 번호이며 이 명부에는 사업자번호가 없습니다.</p><p>사업자번호가 연결된 공개자료 ${number(index.publicCount)}곳 · 내 저장정보 ${number(index.savedCount)}곳. 같은 사업자번호를 합친 검색 대상은 ${number(index.totalCount)}곳입니다.</p><p>전국 모든 사업자의 상호가 수집된 것은 아닙니다. 이름의 앞·중간·끝 어디에 검색어가 포함되어도 찾습니다. 저장된 별칭과 동일 사업자번호로 확인된 공개 상호도 검색합니다.</p><p>예: <strong>이버</strong> → 네이버, <strong>박속</strong> → 서해박속낙지전문점. <strong>%네이버%</strong>·<strong>*네이버*</strong>도 지원하며, <strong>서해%전문점</strong>처럼 중간 글자를 생략할 수 있습니다.</p><p>상호 일부와 지역을 함께 입력할 수 있고, 번호는 하이픈 없이 입력해도 됩니다. 숫자만으로 된 상호는 검색 기준을 상호·업체명으로 바꿔 주세요. 초성·오타 보정은 지원하지 않습니다.</p><div class="search-data-highlights"><span>공개자료 수집 일정<strong>매일 06:17 (한국시간)</strong></span><span>공개 목록 생성<strong>${esc(fmtTime(publicMeta.generatedAt||publicMeta.collectedAt))}</strong></span></div><a class="text-button" href="./#data" data-nav="data">전체 데이터 현황 ${icon('chevron')}</a></div></details></div>
+      <details class="lookup-scope" id="lookup-scope-info"><summary>어디까지 확인할 수 있나요?</summary><div>
+        <p><strong>이름으로 찾기:</strong> ${storeManifest?`공개 상가 ${number(storeManifest.acceptedCount)}곳 · 원천 기준일 ${esc(storeManifest.sourceDate||'미제공')}`:storeMetadataLoading?'전국 상가 목록을 확인하고 있습니다.':'전국 상가 목록 연결을 확인해 주세요.'}의 상호·주소·업종을 찾습니다. 이 명부에는 사업자등록번호가 없으며 현재 영업 여부를 알려주는 자료가 아닙니다.</p>
+        <p><strong>번호로 확인하기:</strong> 입력한 사업자등록번호의 국세청 등록 상태와 과세유형을 확인합니다. 계속사업자라는 결과가 거래 안전성이나 실제 영업 여부를 보장하지는 않습니다.</p>
+        <p><strong>번호가 있는 이름 검색 결과:</strong> 공개 상세자료 ${number(index.publicCount)}곳과 내 저장정보 ${number(index.savedCount)}곳에서 찾습니다. 같은 번호를 합친 대상은 ${number(index.totalCount)}곳이며 전국 상가 검색과 별도입니다.${publicIndexError?' 최신 공개목록을 불러오지 못해 기존 자료만 표시합니다.':''}</p>
+        <p>국내 모든 사업자가 수록된 것은 아닙니다. 이름 일부·지역·% 또는 *를 이용할 수 있으며, 초성·오타 보정은 지원하지 않습니다.</p><a class="text-button" href="./#data" data-nav="data">자료별 출처와 갱신일 보기 ${icon('chevron')}</a>
+      </div></details>
     </section>
-    ${selectedContext?`<div id="lookup-search-context" class="lookup-results-context"><span><strong>“${esc(ui.nameQuery)}”</strong> 검색 결과</span><button id="toggle-name-results" class="text-button" data-action="toggle-name-results" aria-controls="lookup-name-results-area" aria-expanded="${showResults}">${showResults?'결과 목록 접기':'결과 다시 보기'} ${icon('chevron')}</button></div>`:''}
+    ${selectedContext?`<div id="lookup-search-context" class="lookup-results-context"><span><strong>“${esc(ui.nameQuery)}”</strong> 검색 결과에서 선택</span><button id="toggle-name-results" class="text-button" data-action="toggle-name-results" aria-controls="lookup-name-results-area" aria-expanded="${showResults}">${showResults?'결과 목록 접기':'다른 업체 선택'} ${icon('chevron')}</button></div>`:''}
     ${ui.nameQuery?`<div id="lookup-name-results-area" class="lookup-results ${showResults?'is-expanded':''}" ${showResults?'':'hidden'}>${showResults?nameSearchView():''}</div>`:''}
-    ${ui.lookupBusy&&!ui.lookup?`<div class="lookup-progress" role="status"><span class="spinner"></span><div><strong>${esc(formatBusinessNumber(ui.lookupPendingNumber))}</strong><p>선택한 번호의 등록 상태와 공개정보를 확인하고 있습니다.</p></div></div>`:''}
+    ${ui.lookupBusy&&!ui.lookup?`<div class="lookup-progress" role="status"><span class="spinner"></span><div><strong>${esc(formatBusinessNumber(ui.lookupPendingNumber))}</strong><p>입력한 번호의 국세청 등록 상태를 확인하고 있습니다.</p></div></div>`:''}
+    ${saved&&ui.lookup?.businessNumber===saved.businessNumber?`<section class="lookup-save-confirmation" role="status"><div><strong>거래처에 저장했습니다</strong><p>${activeUid?'로그인한 계정':'이 브라우저'}에 확인 기록을 보관했습니다. 다음 조회부터 이전 기록과 변화를 비교할 수 있습니다.</p></div><button type="button" class="button small" data-action="detail" data-id="${esc(saved.id)}">저장한 거래처 보기</button></section>`:''}
     ${storeSearch.selected?renderStoreCatalogDetail({entry:storeSearch.selected,manifest:storeManifest}):ui.lookup?lookupResultView():''}
     ${!hasActivity?lookupStartView():''}
   </div>`;
 }
+function lookupOriginView() {
+  const origin=ui.lookupOrigin;
+  if(!origin)return '';
+  const selectedStore=origin.selectedStore;
+  return `<aside class="lookup-origin" aria-label="이전에 확인한 상가"><div><span class="lookup-origin-label">${selectedStore?'이전에 살펴본 상가':'이전 이름 검색'}</span><strong>${esc(selectedStore?[selectedStore.name,selectedStore.branchName].filter(Boolean).join(' · '):'“'+origin.query+'” 검색 결과')}</strong>${selectedStore?`<p>${esc(selectedStore.roadAddress||selectedStore.address||selectedStore.landAddress||'주소 미제공')}</p>`:''}<p class="lookup-origin-boundary">입력한 번호의 조회 결과는 별도로 표시합니다. ${selectedStore?'이 상가와 같은 사업자인지는':'찾는 업체의 번호인지는'} 등록증·거래 서류로 확인하세요.</p></div><button type="button" class="text-button" data-action="return-lookup-origin">${selectedStore?'상가 정보로 돌아가기':'검색 결과로 돌아가기'} ${icon('chevron')}</button></aside>`;
+}
 function lookupStartView() {
   const saved=workspace.partners.slice(0,3);
-  return `<section class="lookup-start" aria-label="검색 안내"><div class="lookup-start-icon">${icon('building')}</div><h2>확인할 사업자를 검색하세요</h2><p>상호 일부로 전국 상가를 찾고 주소·업종을 살펴보세요.</p><span>사업자번호가 있으면 등록 상태·과세유형도 확인할 수 있습니다.</span></section>
-    ${saved.length?`<section class="lookup-saved" aria-labelledby="lookup-saved-title"><div class="section-row"><h2 id="lookup-saved-title">저장한 거래처</h2><a class="text-button" href="./#partners" data-nav="partners">전체 ${number(workspace.partners.length)}곳 보기 ${icon('chevron')}</a></div><ul class="lookup-saved-list">${saved.map(p=>{const linked=linkedBusiness(p.businessNumber,p);return `<li><button type="button" data-action="lookup-saved" data-bno="${esc(p.businessNumber)}"><span class="company-avatar" aria-hidden="true">${esc(linked.displayName.slice(0,1))}</span><span class="lookup-saved-name"><strong>${esc(linked.displayName)}</strong><small class="number">${formatBusinessNumber(p.businessNumber)}</small></span><span class="lookup-saved-status">${badge(p.lastCheck)}<small>${p.lastCheck?'확인 '+esc(fmtTime(p.lastCheck.checkedAt)):'아직 조회 전'}</small></span>${icon('chevron')}</button></li>`;}).join('')}</ul></section>`:''}`;
+  const numberMode=ui.lookupType==='number';
+  return `<section class="lookup-start" aria-label="검색 안내"><div class="lookup-start-icon">${icon(numberMode?'shield':'building')}</div><h2>${numberMode?'확인한 상태를 거래처 기록으로 남기세요':'같은 이름이어도 주소와 지점을 확인하세요'}</h2><p>${numberMode?'등록 상태와 확인 시각을 보고, 거래처에 저장하면 다음 확인을 이어갈 수 있습니다.':'검색 결과에서 주소·지점·업종을 비교한 뒤 찾는 상가를 선택하세요.'}</p><span>${numberMode?'조회에 실패해도 폐업으로 표시하지 않습니다. 이전 기록이 있으면 당시 확인 시각과 함께 보여드립니다.':'상가 명부의 정보와 국세청 등록 상태는 각각 확인한 범위로 구분해 보여드립니다.'}</span></section>
+    ${saved.length?`<section class="lookup-saved" aria-labelledby="lookup-saved-title"><div class="section-row"><h2 id="lookup-saved-title">저장한 거래처 다시 확인</h2><a class="text-button" href="./#partners" data-nav="partners">전체 ${number(workspace.partners.length)}곳 보기 ${icon('chevron')}</a></div><ul class="lookup-saved-list">${saved.map(p=>{const linked=linkedBusiness(p.businessNumber,p);return `<li><button type="button" data-action="lookup-saved" data-bno="${esc(p.businessNumber)}"><span class="company-avatar" aria-hidden="true">${esc(linked.displayName.slice(0,1))}</span><span class="lookup-saved-name"><strong>${esc(linked.displayName)}</strong><small class="number">${formatBusinessNumber(p.businessNumber)}</small></span><span class="lookup-saved-status">${badge(p.lastCheck)}<small>${p.lastCheck?'확인 '+esc(fmtTime(p.lastCheck.checkedAt)):'아직 조회 전'}</small></span>${icon('chevron')}</button></li>`;}).join('')}</ul></section>`:''}`;
 }
 function businessSearchIndex() {
   const records=publicRecords;
@@ -939,7 +961,7 @@ function connectionModal() {
 function enrichmentRequestModal(bno=ui.lookup?.businessNumber){
   if(!isValidBusinessNumber(bno))return;
   const name=linkedBusiness(bno).publicName||'';
-  openModal('웹 정보 수집 요청',`<form id="enrichment-request-form"><p class="fine-print">사업자번호와 아래 입력은 공개 수집 요청으로 기록됩니다. 내부 메모·비공개 연락처는 입력하지 마세요. 운영자 계정의 요청은 자동 수집하며, 일반 요청은 운영자 확인 후 수집합니다.</p><div class="form-grid section-spacer"><div class="form-field full-span"><label for="enrich-bno">사업자등록번호</label><input id="enrich-bno" name="businessNumber" readonly value="${esc(bno)}"></div><div class="form-field full-span"><label for="enrich-name">상호</label><input id="enrich-name" name="name" maxlength="200" value="${esc(name)}"></div><div class="form-field full-span"><label for="enrich-url">수집할 공개 웹사이트 (선택)</label><input id="enrich-url" name="website" type="url" maxlength="2048" placeholder="https://회사홈페이지 또는 사업자정보 페이지"></div></div><p class="fine-print">회사소개·연락처·제품·채용·SNS 링크를 수집합니다. 접근이 제한된 페이지는 건너뛰며, 결과는 수집·배포 후 이 화면에 반영됩니다.</p><div class="modal-actions"><button class="button" type="button" data-action="close-modal">취소</button><button class="button primary" type="submit">공개 요청 작성 화면 열기 ↗</button></div></form>`);
+  openModal('공개자료 추가 요청 방법',`<form id="enrichment-request-form"><p class="callout">아래 버튼은 <strong>GitHub의 공개 요청 작성 화면</strong>을 새 탭으로 엽니다. GitHub 로그인 후 직접 제출해야 접수되며, 이 화면에서 입력한 것만으로는 요청이 접수되지 않습니다.</p><p class="fine-print section-spacer">제출한 번호·상호·웹사이트는 공개됩니다. 내부 메모·비공개 연락처는 입력하지 마세요. 일반 요청은 운영자가 검토한 뒤 수집합니다.</p><div class="form-grid section-spacer"><div class="form-field full-span"><label for="enrich-bno">사업자등록번호</label><input id="enrich-bno" name="businessNumber" readonly value="${esc(bno)}"></div><div class="form-field full-span"><label for="enrich-name">상호</label><input id="enrich-name" name="name" maxlength="200" value="${esc(name)}"></div><div class="form-field full-span"><label for="enrich-url">수집할 공개 웹사이트 (선택)</label><input id="enrich-url" name="website" type="url" maxlength="2048" placeholder="https://회사홈페이지 또는 사업자정보 페이지"></div></div><p class="fine-print">회사소개·연락처·제품·채용·SNS 링크를 수집합니다. 접근이 제한된 페이지는 건너뛰며, 결과는 수집·배포 후 이 화면에 반영됩니다.</p><div class="modal-actions"><button class="button" type="button" data-action="close-modal">취소</button><button class="button primary" type="submit">GitHub에서 공개 요청 작성 ↗</button></div></form>`);
 }
 function validateModal(bno=ui.lookup?.businessNumber) {
   if(!isValidBusinessNumber(bno))return;
@@ -949,7 +971,7 @@ function privacyModal() {
   openModal('개인정보와 보관 안내',`<div class="source-list"><div><h3>내 브라우저에 보관하는 정보</h3><p class="fine-print">거래처 목록, 메모, 입력 프로필, 확인 이력은 이 기기의 IndexedDB에 저장합니다. 로그인하면 Firebase UID별 Firestore 공간에 거래처·메모·프로필·조회 이력을 저장합니다. 비로그인 자료는 기기에 보관하고 명시적으로 가져올 때만 계정에 추가합니다. 팀 공동 작업은 제공하지 않습니다. 브라우저 데이터를 삭제하면 기록이 없어질 수 있으니 백업 파일을 보관하세요.</p></div><div><h3>조회할 때 전달하는 정보</h3><p class="fine-print">상태조회는 사업자번호, 진위 대조는 사용자가 입력한 번호·개업일·대표자명을 설정된 조회 서버와 해당 기관으로 전달합니다. 내 사업 매출·직원 수·거래 메모는 조회 기관에 전송하지 않습니다. 로그인 후 저장하는 업무 정보는 내 계정의 Firestore 공간으로 전달합니다.</p></div><div><h3>백업과 삭제</h3><p class="fine-print">거래처 관리에서 CSV 내보내기 또는 전체 JSON 백업을 할 수 있습니다. 개별 거래처 삭제 시 해당 거래처의 메모·확인 이력·변경 기록도 함께 삭제합니다. 백업에는 내부 메모가 포함되므로 필요한 사람에게만 전달하세요.</p></div><div><h3>공개정보의 해석</h3><p class="fine-print">사업자한눈은 독립적인 민간 서비스입니다. 정보의 기준일·출처를 확인하세요. 사업자 상태와 통신판매 신고는 거래 안전성이나 신용등급을 의미하지 않습니다.</p></div></div><div class="modal-actions"><button class="button primary" data-action="close-modal">확인</button></div>`);
 }
 function helpModal() {
-  openModal('사업자한눈 이용 안내',`<div class="guide-step"><span class="step-number">01</span><div><h3>이름 또는 사업자번호 조회</h3><p>상호·업체명의 일부를 입력하면 공개 수집자료와 내 거래처·내 사업 정보에서 찾습니다. 주소와 번호를 확인한 뒤 업체를 선택하세요. 사업자번호 10자리는 바로 국세청 상태를 조회합니다. 숫자로만 된 이름은 검색 기준을 상호·업체명으로 바꾸세요.</p></div></div><div class="guide-step"><span class="step-number">02</span><div><h3>거래처 등록과 확인</h3><p>거래처를 직접 등록하거나 CSV로 가져오세요. 여러 업체의 상태를 한 번에 확인하고, 실제 성공 응답끼리 비교한 변경 기록을 볼 수 있습니다.</p></div></div><div class="guide-step"><span class="step-number">03</span><div><h3>지원사업 탐색</h3><p>내 사업 프로필을 저장한 뒤 지역·관심 분야가 관련된 공고를 살펴보세요. 자격조건·제외 대상·접수일정은 항상 원문에서 확인합니다.</p></div></div><div class="callout" style="margin-top:15px">${icon('info')}<span>조회가 연결 대기로 보이면 데이터 현황에서 운영 서버와 API 설정 상태를 확인하세요. 조회 없이 거래처 등록·메모·백업을 사용할 수 있습니다.</span></div><div class="modal-actions"><button class="button primary" data-action="close-modal">시작하기</button></div>`);
+  openModal('사업자한눈 이용 안내',`<div class="guide-step"><span class="step-number">01</span><div><h3>이름만 알면 주소·업종부터 찾기</h3><p>이름으로 업체 찾기에서 상호 일부를 입력하고 지역을 좁혀 보세요. 지점·주소를 비교해 상가를 선택합니다. 상가 명부에는 사업자번호가 없고, 현재 영업 여부를 판정하지 않습니다.</p></div></div><div class="guide-step"><span class="step-number">02</span><div><h3>사업자번호로 등록 상태 확인</h3><p>사업자등록번호 10자리로 국세청의 등록 상태와 과세유형을 확인합니다. 번호가 포함된 이름 검색 결과에서도 바로 확인할 수 있습니다. 상호·주소를 번호만으로 확인하는 기능은 아닙니다.</p></div></div><div class="guide-step"><span class="step-number">03</span><div><h3>결과를 읽고 거래처에 저장</h3><p>확인 결과에서 상태의 의미·확인 시각·다음 행동을 읽어 보세요. 자료 출처와 확인 기록은 각각의 탭에서 확인합니다. 저장한 거래처는 메모·태그와 함께 관리하고 이후 조회 결과의 변화를 비교할 수 있습니다.</p></div></div><div class="guide-step"><span class="step-number">04</span><div><h3>내 사업에 맞는 지원사업 찾기</h3><p>내 사업 프로필을 입력하고 관련 공고를 살펴보세요. 신청자격과 접수기간은 공고 원문에서 확인합니다.</p></div></div><div class="callout section-spacer"><span>로그인 전 기록은 이 브라우저, 로그인 후 기록은 해당 계정에 저장합니다. 조회 연결에 문제가 있어도 거래처 등록·메모·백업을 이용할 수 있습니다.</span></div><div class="modal-actions"><button class="button primary" data-action="close-modal">확인</button></div>`);
 }
 function go(view) {
   if(!titles[view])return;
@@ -1026,11 +1048,40 @@ async function refreshEnrichment(bno,serial=lookupSerial,{force=false}={}){
 function clearLookupResult(){
   ui.lookup=null;ui.lookupBusy=false;ui.commerce=null;ui.lookupSelection=null;
   ui.enrichment=null;ui.enrichmentBusy=false;ui.enrichmentError='';
-  ui.lookupTab='overview';ui.lookupPendingNumber='';ui.nameResultsExpanded=false;
+  ui.lookupTab='overview';ui.lookupPendingNumber='';ui.nameResultsExpanded=false;ui.lookupSavedNumber='';
+}
+function changeLookupIntent(type,{fromSearch=false}={}) {
+  if(!['name','number'].includes(type))return;
+  if(type===ui.lookupType&&!fromSearch)return;
+  ui.lookupDrafts[ui.lookupType==='number'?'number':'name']=ui.lookupQuery;
+  const origin=type==='number'
+    ? ui.lookupOrigin||createLookupOrigin({query:ui.nameQuery,namePage:ui.nameSearchPage,storeSearch})
+    : null;
+  const restored=type==='name'?restoreLookupOrigin(ui.lookupOrigin):null;
+  lookupSerial++;interactionEpoch++;resetStoreSearch();clearLookupResult();
+  ui.lookupError='';ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';ui.nameSearchPage=1;
+  ui.lookupOrigin=origin;
+  if(restored){
+    const {storeSearch:restoredSearch,...state}=restored;
+    Object.assign(ui,state);storeSearch=restoredSearch;
+    ui.lookupQuery=ui.lookupDrafts.name??state.lookupQuery;
+  }else{
+    ui.lookupType=type;
+    const originKey=origin?`${origin.selectedStore?.id||'query:'+origin.query}|${origin.storeSearch.regionCode}`:'';
+    ui.lookupQuery=originKey&&originKey!==ui.lookupNumberOriginKey?'':ui.lookupDrafts[type]||'';
+    if(type==='number')ui.lookupNumberOriginKey=originKey;
+  }
+  render();
+  const target=restored?(document.getElementById(storeSearch.selected?'store-detail-title':'store-results-title')||document.getElementById('name-results-title')):null;
+  (target||document.getElementById('business-query'))?.focus({preventScroll:true});
+}
+function numberHelpModal() {
+  openModal('사업자번호는 어디서 확인하나요?',`<div class="number-help-content"><p>사업자등록번호는 <strong>10자리</strong>입니다. 아래 자료에서 업체명과 함께 확인해 주세요.</p><ol><li><strong>거래처가 제공한 사업자등록증</strong><span>상호·주소도 함께 비교할 수 있습니다.</span></li><li><strong>세금계산서·영수증의 사업자번호</strong><span>주문번호나 상가업소번호와 혼동하지 마세요.</span></li><li><strong>거래처에 직접 문의</strong><span>번호를 모르면 이름만으로 국세청 상태를 확인할 수 없습니다.</span></li></ol><p class="callout">지금 살펴본 상가와 입력한 번호는 자동으로 연결되지 않습니다. 같은 업체인지 확인한 뒤 거래처에 저장하세요.</p></div><div class="modal-actions"><button type="button" class="button primary" data-action="close-modal">확인하고 돌아가기</button></div>`);
 }
 async function submitLookup(value,{refresh=false,type=ui.lookupType}={}){
   if(lookupComposing)return;
   const parsed=classifyBusinessQuery(value,{type});
+  ui.lookupDrafts[type==='number'?'number':'name']=String(value??'');
   if((ui.nameSearchBusy||storeSearch.loading)&&!refresh&&parsed.kind==='name'&&ui.nameQuery===parsed.query)return;
   if(ui.lookupBusy&&parsed.kind==='number'&&ui.lookupPendingNumber===parsed.businessNumber)return;
   if(parsed.kind==='number'&&ui.lookup?.businessNumber===parsed.businessNumber){
@@ -1038,6 +1089,7 @@ async function submitLookup(value,{refresh=false,type=ui.lookupType}={}){
     await lookup(parsed.businessNumber,{preserveContext:true});return;
   }
   resetStoreSearch();
+  if(parsed.kind==='name')ui.lookupOrigin=null;
   const serial=++lookupSerial;
   interactionEpoch++;
   const interaction=interactionEpoch;
@@ -1078,7 +1130,7 @@ async function lookup(value,{candidate=null,preserveContext=false}={}) {
   const serial=++lookupSerial;
   interactionEpoch++;
   const interaction=interactionEpoch;
-  ui.lookupError='';ui.nameSearchBusy=false;ui.lookupSelection=candidate;
+  ui.lookupError='';ui.nameSearchBusy=false;ui.lookupSelection=candidate;ui.lookupSavedNumber='';
   ui.lookupTab=activeTab;ui.lookupPendingNumber=bno;
   if(candidate)ui.nameResultsExpanded=false;
   ui.lookupBusy=true;
@@ -1158,7 +1210,7 @@ async function savePartner(form) {
   if(!modal?.prefilledName?.automatic||enteredName!==modal.prefilledName.value)p=setPartnerName(p,enteredName);
   if(ui.lookup?.businessNumber===bno&&!old) p=applyCheckResults([p],[ui.lookup]).partners[0];
   const partners=old?workspace.partners.map(item=>item.id===old.id?p:item):[p,...workspace.partners];
-  if(await persist({...workspace,partners})){if(old)detailDrafts.delete(old.id);closeModal();toast('거래처를 저장했습니다.');}
+  if(await persist({...workspace,partners})){if(old)detailDrafts.delete(old.id);ui.lookupSavedNumber=bno;closeModal();render();toast((activeUid?'로그인한 계정':'이 브라우저')+'에 거래처를 저장했습니다.');}
 }
 async function saveProfile(form) {
   const data=new FormData(form);
@@ -1238,7 +1290,7 @@ document.addEventListener('input',event=>{
   }
   if(t.closest('#profile-form'))captureProfileDraft(t.closest('form'));
   if(t.id==='business-query'){
-    interactionEpoch++;ui.lookupQuery=t.value;ui.lookupError='';t.removeAttribute('aria-invalid');
+    interactionEpoch++;ui.lookupQuery=t.value;ui.lookupDrafts[ui.lookupType==='number'?'number':'name']=t.value;ui.lookupError='';t.removeAttribute('aria-invalid');
     const error=document.getElementById('lookup-error');if(error)error.textContent='';
   }
   if(t.id==='partner-search'){interactionEpoch++;ui.partnerQuery=t.value;render();}
@@ -1264,11 +1316,6 @@ document.addEventListener('change',async event=>{
   if(t.id==='detail-history-period'){updateDetailHistory({period:t.value});return;}
   if(t.id==='detail-history-sort'){updateDetailHistory({sort:t.value});return;}
   if(t.id==='store-region-filter'){interactionEpoch++;await searchStoreCatalog(ui.nameQuery,{regionCode:t.value});return;}
-  if(t.id==='lookup-type'){
-    resetStoreSearch();
-    lookupSerial++;interactionEpoch++;ui.lookupType=t.value;ui.lookupError='';ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';clearLookupResult();
-    render();document.getElementById('business-query')?.focus({preventScroll:true});return;
-  }
   if(t.closest('#profile-form'))captureProfileDraft(t.closest('form'));
   if(t.id==='partner-status'){interactionEpoch++;ui.partnerStatus=t.value;render();}
   if(t.id==='open-only'){ui.openOnly=t.checked;ui.page=1;render();}
@@ -1367,6 +1414,14 @@ document.addEventListener('click',async event=>{
     if(ui.view!=='partners')go('partners');else render();return;
   }
   if(action==='lookup-mode'){interactionEpoch++;ui.mode=element.dataset.mode;render();return;}
+  if(action==='lookup-intent'){changeLookupIntent(element.dataset.intent);return;}
+  if(action==='return-lookup-origin'){changeLookupIntent('name');return;}
+  if(action==='number-help'){numberHelpModal();return;}
+  if(action==='edit-lookup-number'){
+    const value=element.dataset.bno||ui.lookup?.businessNumber||'';
+    changeLookupIntent('number',{fromSearch:true});ui.lookupQuery=value;ui.lookupDrafts.number=value;
+    render();const input=document.getElementById('business-query');input?.focus({preventScroll:true});input?.select();return;
+  }
   if(action==='lookup-tab'){
     if(element.dataset.bno&&element.dataset.bno!==ui.lookup?.businessNumber)return;
     activateLookupTab(element.dataset.tab,{focus:true,target:element.dataset.target||''});return;
@@ -1379,7 +1434,7 @@ document.addEventListener('click',async event=>{
   }
   if(action==='lookup-saved'){
     const partner=byNumber(normalizeBusinessNumber(element.dataset.bno));
-    if(partner)await lookup(partner.businessNumber);return;
+    if(partner){ui.lookupOrigin=null;await lookup(partner.businessNumber);}return;
   }
   if(action==='close-result'){
     lookupSerial++;interactionEpoch++;clearLookupResult();render();
@@ -1397,6 +1452,7 @@ document.addEventListener('click',async event=>{
     interactionEpoch++;storeSearch.page=Math.max(1,storeSearch.page+(action==='store-search-next'?1:-1));render();document.getElementById('store-results-title')?.focus({preventScroll:true});return;
   }
   if(action==='select-name-result'){
+    ui.lookupOrigin=null;
     storeSerial++;storeClient.cancel();storeSearch.loading=false;storeSearch.selected=null;
     const candidate=currentNameSearch().result.results.find(entry=>entry.businessNumber===element.dataset.number);
     if(candidate&&ui.lookup?.businessNumber===candidate.businessNumber){
@@ -1409,9 +1465,7 @@ document.addEventListener('click',async event=>{
     interactionEpoch++;ui.nameSearchPage=Math.max(1,ui.nameSearchPage+(action==='name-search-next'?1:-1));render();document.getElementById('name-results-title')?.focus({preventScroll:true});return;
   }
   if(action==='search-by-number'){
-    resetStoreSearch();
-    lookupSerial++;interactionEpoch++;clearLookupResult();ui.lookupType='number';ui.lookupQuery='';ui.nameQuery='';ui.nameSearchBusy=false;ui.nameSearchError='';ui.lookupError='';
-    render();document.getElementById('business-query')?.focus({preventScroll:true});return;
+    changeLookupIntent('number',{fromSearch:true});return;
   }
   if(action==='add-partner-from-search'){partnerModal(null,{name:ui.nameQuery});return;}
   if(action==='add-partner'){partnerModal();return;}

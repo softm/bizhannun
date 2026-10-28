@@ -15,6 +15,10 @@ const render = overrides => renderBusinessSearch({
 
 test('name results show public and private coverage without implying a nationwide registry', () => {
   const html = render();
+  assert.match(html, /id="name-results-title" tabindex="-1">등록 상태를 확인할 수 있는 업체/);
+  assert.match(html, /사업자번호 있음/);
+  assert.match(html, /업체명·주소·사업자번호를 비교한 뒤 선택/);
+  assert.match(html, /해당 번호로 국세청 등록 상태를 확인/);
   assert.match(html, /공개자료 2곳/);
   assert.match(html, /내 저장정보 3곳/);
   assert.match(html, /검색 대상은 4곳/);
@@ -67,7 +71,7 @@ test('same-name businesses retain distinct number-based selection and selected s
   assert.equal((html.match(/data-action="select-name-result"/g) || []).length, 2);
   assert.match(html, /data-number="2208162517"/);
   assert.match(html, /data-number="6901100416"/);
-  assert.match(html, /같은상호 220-81-62517 선택 후 조회/);
+  assert.match(html, /같은상호 220-81-62517 등록 상태 확인/);
   assert.match(html, /같은상호 690-11-00416 상세 다시 보기/);
   assert.equal((html.match(/class="business-candidate is-selected"/g) || []).length, 1);
   assert.match(html, /서울시 테스트길 1/);

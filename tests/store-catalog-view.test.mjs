@@ -18,7 +18,10 @@ const result = (entries, overrides) => ({ results: entries, total: entries.lengt
 
 test('catalog results identify their scope, source date, and numberless selection action', () => {
   const html = search({ result: result([entry()]) });
-  assert.match(html, /사업자번호 미확인/);
+  assert.match(html, /id="store-results-title" tabindex="-1">이름으로 찾은 상가/);
+  assert.match(html, /주소·업종 확인/);
+  assert.match(html, /이 명부에는 사업자등록번호가 없습니다/);
+  assert.match(html, />주소·업종 보기<\/button>/);
   assert.match(html, /data-action="select-store-result" data-id="semas:STORE0001"/);
   assert.match(html, /시청점/);
   assert.match(html, /서울특별시 중구 테스트길 1/);
@@ -64,6 +67,7 @@ test('only a complete search can show a zero-match state', () => {
   assert.match(html, /부산광역시 상가 명부/);
   assert.match(html, /업체의 폐업 여부를 의미하지 않습니다/);
   assert.match(html, /data-action="search-by-number"/);
+  assert.match(html, /data-action="number-help"/);
   assert.doesNotMatch(html, /role="alert"/);
   const malformed = search({ result:result([], {total:null}) });
   assert.match(malformed, /검색을 완료하지 못했습니다/);
@@ -131,8 +135,32 @@ test('numberless details separate source IDs, industry taxonomy and NTS state lo
   assert.match(html, /data-action="return-store-results"/);
   assert.match(html, /id="store-detail-title" tabindex="-1"/);
   assert.match(html, /data-action="search-by-number"/);
+  assert.match(html, /data-action="number-help"/);
+  assert.match(html, /현재 영업 여부를 뜻하지 않으며/);
+  assert.match(html, /이 명부에는 사업자등록번호가 없습니다/);
   assert.doesNotMatch(html, /data-number=|사업자번호로 조회[^<]*STORE|저장|영업 중|계속사업자/);
   assert.equal(renderStoreCatalogDetail(), '');
+});
+
+test('numberless details prioritize address and next steps while keeping source identifiers in a closed disclosure', () => {
+  const html = renderStoreCatalogDetail({entry:entry({businessNumber:'2208162517'}),manifest});
+  const metadataPosition = html.indexOf('<details id="store-detail-metadata"');
+  assert.ok(metadataPosition > -1);
+  const main = html.slice(0, metadataPosition);
+  const metadata = html.slice(metadataPosition);
+  assert.match(main, /한눈커피/);
+  assert.match(main, /시청점/);
+  assert.match(main, /서울특별시 중구 테스트길 1/);
+  assert.match(main, /업종<\/dt><dd>카페/);
+  assert.match(main, /data-action="search-by-number">사업자번호 입력/);
+  assert.match(main, /data-action="number-help">번호 찾는 방법/);
+  assert.doesNotMatch(main, /STORE0001|업종 분류체계|실제 자료 수집/);
+  assert.match(metadata, /^<details id="store-detail-metadata" class="store-catalog-detail-metadata">/);
+  assert.match(metadata, /자료 출처와 기준일/);
+  assert.match(metadata, /원천 상가업소번호<\/dt><dd>STORE0001/);
+  assert.match(metadata, /원천 기준일<\/dt><dd>2026-06-30/);
+  // A directory row cannot become an NTS lookup target, even if an unexpected number appears in its payload.
+  assert.doesNotMatch(html, /2208162517|data-number=|data-bno=|save-lookup|select-name-result/);
 });
 
 test('details escape every source field and reject invalid calendar dates', () => {

@@ -1,6 +1,6 @@
 {
   "name": "bizhannun",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "사업자한눈 — 사업자 조회, 거래처 확인 기록과 지원사업 탐색",

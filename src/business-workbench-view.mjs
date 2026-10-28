@@ -1,14 +1,15 @@
 import { formatBusinessNumber, normalizeBusinessNumber } from './domain.mjs';
 import { BASIC_BUSINESS_FIELDS, buildBusinessInsights } from './business-insights.mjs';
+import { buildBusinessOutcome } from './business-outcome.mjs';
 import { resolveBusinessProfile } from './business-profile.mjs';
 import { ENRICHMENT_FIELDS, safeEnrichmentUrl } from './enrichment.mjs';
 import { discoveryLinks } from './enrichment-view.mjs';
 
 export const LOOKUP_TABS = Object.freeze([
-  { id: 'overview', label: '요약' },
-  { id: 'facts', label: '사업자 정보' },
-  { id: 'sources', label: '출처·수집' },
-  { id: 'history', label: '조회 이력' },
+  { id: 'overview', label: '확인 결과' },
+  { id: 'facts', label: '업체 정보' },
+  { id: 'sources', label: '자료 출처' },
+  { id: 'history', label: '확인 기록' },
 ].map(Object.freeze));
 
 export const normalizeLookupTab = tab => LOOKUP_TABS.some(item => item.id === tab) ? tab : 'overview';
@@ -22,9 +23,8 @@ const channelNames = {
   official_website: '공식 웹사이트', website: '웹사이트', public_data: '공공데이터', registry: '공개 등록자료',
   directory: '민간 기업정보', news: '뉴스·보도', jobs: '채용', social: 'SNS', commerce: '커머스', user_document: '제공 자료',
 };
-const statusNames = { active: '계속사업자', suspended: '휴업자', closed: '폐업자', unknown: '미확인' };
-const actionNames = new Set(['insight-refresh-status', 'validate-registration', 'insight-view-sources', 'enrichment-request']);
-const secondaryActions = new Set(['profile-gaps', 'candidates', 'registration-cross-check']);
+const actionNames = new Set(['insight-refresh-status', 'validate-registration', 'insight-view-sources', 'edit-lookup-number']);
+const additionalActionIds = new Set(['identity-mismatch', 'field-conflicts', 'registration-cross-check']);
 const providerLabels = {
   success: '수집 완료', partial: '일부 수집', not_found: '해당 원천에 자료 없음',
   not_configured: '인증키 설정 대기', identity_mismatch: '번호 불일치', error: '활용승인·연결 확인 필요',
@@ -51,33 +51,28 @@ function actionButton(action, number, className = 'button small', refreshing = f
 function tabButton(tab, number, label, className = 'text-button') {
   return `<button type="button" class="${className}" data-action="lookup-tab" data-tab="${tab}" data-bno="${esc(number)}">${esc(label)}</button>`;
 }
-function statusBadge(status) {
-  const tone = { active: 'positive', suspended: 'warning', closed: 'danger' }[status.businessStatus] || 'neutral';
-  const failedLabel = { error: '조회 실패 · 상태 미확인', not_found: '등록정보 미확인', not_configured: '연결 대기' }[status.latestOutcome];
-  const label = ['active', 'suspended', 'closed'].includes(status.businessStatus) ? status.label || statusNames[status.businessStatus] : failedLabel || '상태 미확인';
-  return `<span class="badge ${tone} dot">${status.usingPrevious ? '직전 성공 · ' : ''}${esc(label)}</span>`;
+function statusBadge(outcome) {
+  return `<span class="badge ${esc(outcome.tone)} dot">${esc(outcome.badge)}</span>`;
 }
-function statusNotice(result, status) {
-  if (status.usingPrevious) return `<p class="callout warning" role="status">최근 상태 조회(${time(status.latestCheckedAt)})를 완료하지 못했습니다. 표시된 상태와 과세유형은 직전 성공 시점의 기록입니다.${result.message ? ` ${esc(result.message)}` : ''}</p>`;
-  if (result.outcome !== 'ok') return `<p class="callout ${result.outcome === 'error' ? 'warning' : ''}" role="status">${esc(result.message || ({ not_found: '이번 조회에서 등록정보를 찾지 못했습니다. 번호와 등록증을 확인해 주세요.', not_configured: '상태 조회 연결을 아직 사용할 수 없습니다.' }[result.outcome] || '상태 조회를 완료하지 못했습니다.'))} 현재 상태는 미확인입니다.</p>`;
-  return '';
+function statusNotice(result, outcome) {
+  if (outcome.currentConfirmed) return '';
+  return `<p class="callout${outcome.kind === 'error' ? ' warning' : ''}" role="status">${esc(outcome.fact)} ${esc(outcome.meaning)}${outcome.previousRecord ? ` 직전 성공 기록은 ${esc(outcome.previousRecord.label)}(${time(outcome.previousRecord.checkedAt)})이며 현재 상태를 대신하지 않습니다.` : ''}${result.outcome !== 'ok' && result.message ? ` ${esc(result.message)}` : ''}</p>`;
 }
-function renderHeader({ number, result, linked, model, registered, refreshing }) {
+function renderHeader({ number, linked, model, outcome, registered, refreshing }) {
   const status = model.status || {};
   const displayName = linked.displayName === '이름 미입력' ? '사업자 조회 결과' : linked.displayName;
   const sourceCaption = linked.nameSource === 'user'
     ? `저장한 이름 · 사용자 입력${linked.publicName && linked.userName !== linked.publicName ? ` <span>공개 상호 · ${esc(linked.publicName)}</span>` : ''}`
     : linked.publicName ? `상호 출처 · ${sourceLink(linked.nameSourceUrl, linked.nameSourceLabel)} · 수집 ${time(linked.nameCollectedAt)}`
       : '상호 미확보 · 국세청 상태 조회에는 상호·주소가 포함되지 않습니다.';
-  const statusCaption = status.checkedAt
-    ? `${status.usingPrevious ? '직전 정상 조회' : '정상 조회'} · ${time(status.checkedAt)}`
-    : `마지막 조회 시도 · ${time(status.latestCheckedAt || result.checkedAt)}`;
+  const statusCaption = `${outcome.timeLabel} · ${time(outcome.observedAt)}`;
+  const priorTax = !!status.taxType && !outcome.currentConfirmed;
   return `<header class="lookup-detail-header">
     <div class="lookup-detail-identity">
-      <div class="lookup-detail-title-row"><h2 id="lookup-result-title" tabindex="-1">${esc(displayName)}</h2>${statusBadge(status)}</div>
-      <p class="lookup-detail-meta"><span class="number">${esc(formatBusinessNumber(number))}</span><span>${esc(status.taxType || '과세유형 미확인')}</span>${status.closedAt ? `<span>응답의 폐업일 · ${esc(status.closedAt)}</span>` : ''}</p>
+      <div class="lookup-detail-title-row"><h2 id="lookup-result-title" tabindex="-1">${esc(displayName)}</h2>${statusBadge(outcome)}</div>
+      <p class="lookup-detail-meta"><span class="number">${esc(formatBusinessNumber(number))}</span><span>${priorTax ? '이전 기록 · ' : ''}${esc(status.taxType || '과세유형 미확인')}</span>${status.closedAt ? `<span>${outcome.currentConfirmed ? '응답의' : '이전 기록의'} 폐업일 · ${esc(status.closedAt)}</span>` : ''}</p>
       <p class="lookup-name-source">${sourceCaption}</p>
-      <p class="lookup-status-source">${statusCaption}${status.sourceName ? ` · ${sourceLink(status.sourceUrl, status.sourceName)}` : ''}</p>
+      <p class="lookup-status-source">${statusCaption}${status.sourceName && !outcome.previousRecord ? ` · ${sourceLink(status.sourceUrl, status.sourceName)}` : ''}</p>
     </div>
     <div class="lookup-detail-actions">
       <button type="button" class="button primary small" data-action="save-lookup" data-bno="${esc(number)}">${registered ? '거래처 정보 수정' : '거래처에 저장'}</button>
@@ -98,20 +93,37 @@ function basicFields(model) {
 function actionRow(action, index, number, refreshing) {
   return `<li class="lookup-action${action.tone === 'warning' ? ' is-attention' : ''}"><span class="lookup-action-number" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span><div class="lookup-action-copy"><h4>${esc(action.title)}</h4><p>${esc(action.description)}</p></div>${actionButton(action, number, 'button small', refreshing)}</li>`;
 }
-function renderOverview({ number, model, refreshing }) {
+function renderOverview({ number, result, model, outcome, refreshing, registered }) {
   const basic = basicFields(model);
   const missing = basic.filter(item => !item.confirmed);
   const evidence = model.evidence || {};
-  const actions = list(model.actions).filter(action => !secondaryActions.has(action.id));
-  const primary = actions.slice(0, 2), rest = actions.slice(2);
-  const routine = list(model.actions).find(action => action.id === 'registration-cross-check');
+  const next = outcome.nextAction;
+  const actions = list(model.actions).filter(action => additionalActionIds.has(action.id) &&
+    action.id !== next.id && action.action !== 'enrichment-request');
+  const previous = outcome.previousRecord;
+  const collectionIncomplete = ['partial', 'failed'].includes(evidence.collectionStatus);
+  const savedGuidance = registered
+    ? '저장한 거래처의 확인 기록에서 이전 조회와 상태 변화를 비교할 수 있습니다.'
+    : '확인한 내용을 거래처에 저장하면 메모를 남기고 다음 조회와 비교할 수 있습니다. 위의 ‘거래처에 저장’을 이용하세요.';
   return `<div class="lookup-overview">
-    <p class="lookup-summary-line"><strong>기본정보 ${basic.length - missing.length} / ${basic.length}개 확보</strong><span class="lookup-summary-missing">${missing.length ? `미확보 · ${missing.map(item => esc(item.label)).join(' · ')}` : '상호·주소·전화·업태·종목·웹사이트 출처 연결'}</span>${tabButton('facts', number, '사업자 정보 보기')}</p>
-    <p class="lookup-evidence-line">연결 출처 ${esc(evidence.sourceCount || 0)}개 자료 · ${esc(evidence.domainCount || 0)}개 사이트${tabButton('sources', number, `출처·확인 전 후보 ${evidence.candidateCount || 0}개 보기`)}</p>
-    ${primary.length ? `<h3 class="lookup-section-title">지금 확인할 사항</h3><ol class="lookup-actions-list">${primary.map((action, index) => actionRow(action, index, number, refreshing)).join('')}</ol>` : '<p class="lookup-summary-note">확보한 정보의 출처와 기준시각을 살펴보고, 필요한 자료를 보강할 수 있습니다.</p>'}
-    ${rest.length ? `<details id="lookup-more-actions" class="lookup-extra-actions"><summary>추가 확인 사항 ${rest.length}개</summary><ol class="lookup-actions-list" start="3">${rest.map((action, index) => actionRow(action, index + 2, number, refreshing)).join('')}</ol></details>` : ''}
-    <div class="lookup-summary-tools">${routine ? actionButton(routine, number, 'text-button') : ''}<button type="button" class="text-button" data-action="enrichment-request" data-bno="${esc(number)}">공개자료 보강 요청</button></div>
-    <p class="fine-print lookup-summary-policy">정보 확보 범위이며 업체의 신용·지급능력 평가가 아닙니다. 상태 7일·공개자료 30일은 이 앱의 재확인 안내 기준입니다.</p>
+    <section class="lookup-outcome is-${esc(outcome.tone)}" aria-labelledby="lookup-outcome-title">
+      <p class="lookup-outcome-kicker">${outcome.currentConfirmed ? '확인된 등록 상태' : '이번 확인 결과'}</p>
+      <h3 id="lookup-outcome-title">${esc(outcome.fact)}</h3>
+      <p class="lookup-outcome-meaning">${esc(outcome.meaning)}</p>
+      <p class="lookup-outcome-time">${esc(outcome.timeLabel)} · ${time(outcome.observedAt)}${outcome.sourceName && !previous ? ` · ${sourceLink(outcome.sourceUrl, outcome.sourceName)}` : ''}</p>
+      ${previous ? `<aside class="lookup-previous-result" aria-label="직전 성공 기록"><strong>직전 성공 기록 · ${esc(previous.label)}</strong><p>${time(previous.checkedAt)}${previous.taxType ? ` · ${esc(previous.taxType)}` : ''}${outcome.sourceName ? ` · ${sourceLink(outcome.sourceUrl, outcome.sourceName)}` : ''}</p><small>이전 상태와 과세유형입니다. 현재 상태를 확인한 결과가 아닙니다.</small></aside>` : ''}
+      ${result.outcome !== 'ok' && result.message ? `<details id="lookup-response-detail" class="lookup-response-detail"><summary>조회 안내 자세히 보기</summary><p>${esc(result.message)}</p></details>` : ''}
+    </section>
+    <section class="lookup-next-step" aria-labelledby="lookup-next-step-title"><div><p class="lookup-outcome-kicker">다음으로 할 일</p><h3 id="lookup-next-step-title">${esc(next.title)}</h3><p>${esc(next.description)}</p></div>${actionButton(next, number, 'button primary', refreshing)}</section>
+    ${actions.length ? `<details id="lookup-more-actions" class="lookup-extra-actions"><summary>추가로 확인할 사항 ${actions.length}개</summary><ol class="lookup-actions-list">${actions.map((action, index) => actionRow(action, index, number, refreshing)).join('')}</ol></details>` : ''}
+    <p class="lookup-save-guidance">${esc(savedGuidance)}</p>
+    <details id="lookup-supporting-info" class="lookup-supporting-info"><summary>함께 확인할 업체 정보</summary>
+      <p class="lookup-data-note">${missing.length === basic.length ? '이 번호와 연결된 업체 기본정보가 아직 없습니다.' : missing.length ? '공개자료에서 확인하지 못한 항목이 있습니다.' : '상호·주소 등 기본정보에 공개자료의 출처가 연결되어 있습니다.'} 자료의 확보 범위이며 업체의 신뢰도를 평가한 결과가 아닙니다.</p>
+      <p class="lookup-summary-line"><strong>기본정보 ${basic.length - missing.length} / ${basic.length}개 확보</strong><span class="lookup-summary-missing">${missing.length ? `미확보 · ${missing.map(item => esc(item.label)).join(' · ')}` : '상호·주소·전화·업태·종목·웹사이트 출처 연결'}</span>${tabButton('facts', number, '업체 정보 보기')}</p>
+      <p class="lookup-evidence-line">연결 출처 ${esc(evidence.sourceCount || 0)}개 자료 · ${esc(evidence.domainCount || 0)}개 사이트${tabButton('sources', number, `자료 출처·확인 전 후보 ${evidence.candidateCount || 0}개 보기`)}</p>
+      ${collectionIncomplete ? '<p class="lookup-data-note">최근 공개자료 수집을 모두 완료하지 못했습니다. 확보된 자료는 해당 출처의 수집일과 함께 보관하며, 수집 문제를 업체 상태 변화로 판단하지 않습니다.</p>' : ''}
+      <p class="fine-print lookup-summary-policy">상태 7일·공개자료 30일은 이 앱의 재확인 안내 기준입니다. 정보 제공기관의 갱신 주기와 다릅니다.</p>
+    </details>
   </div>`;
 }
 function fieldSource(source) {
@@ -167,7 +179,8 @@ function renderSources({ number, summary, record, model, loading }) {
     <dl class="lookup-collection-highlights"><div><dt>마지막 수집 시도</dt><dd>${time(collection.lastAttemptAt)}</dd></div><div><dt>마지막 성공 수집</dt><dd>${time(lastSuccess)}</dd></div><div><dt>정기 수집 일정</dt><dd>매일 06:17 (한국시간)<small>등록된 수집 대상·승인된 요청만 갱신</small></dd></div></dl>
     <details id="lookup-collection" class="enrichment-coverage" open><summary>원천별 수집 상태</summary>${collectionWarning}<div class="lookup-provider-list">${providers.length ? providers.map(provider => `<article><strong>${esc(provider.label || provider.provider || '공개 원천')}</strong><span>${esc(providerLabels[provider.status] || '확인 필요')}</span>${provider.checkedAt ? `<small>확인 ${time(provider.checkedAt)}</small>` : ''}${provider.message ? `<p>${esc(provider.message)}</p>` : ''}</article>`).join('') : '<p class="fine-print">원천별 수집 결과가 아직 없습니다.</p>'}</div><p class="fine-print">공공 API 자료는 각 서비스의 활용승인 범위에 따라 추가됩니다. 자료가 없거나 수집에 실패한 것으로 미등록·폐업을 판단하지 않습니다.</p>${collection.message ? `<p class="fine-print">${esc(collection.message)}</p>` : ''}</details>
     <details id="lookup-source-list" class="enrichment-sources" open><summary>연결자료 ${esc(sourceCount)}개 · 수집기록 ${confirmed.length}건 · 확인 전 후보 ${esc(candidateCount)}개</summary><h3 class="lookup-section-title">동일 사업자로 연결된 출처</h3><div class="lookup-source-list">${confirmed.length ? confirmed.map(source => renderSource(source)).join('') : '<p class="fine-print">동일 사업자로 연결된 공개 출처가 아직 없습니다.</p>'}</div>${candidates.length ? `<div class="lookup-source-candidates"><h3 class="lookup-section-title">연결 전 확인할 후보</h3><div class="lookup-source-list">${candidates.map(source => renderSource(source, true)).join('')}</div></div>` : ''}<p class="fine-print">연결자료 수는 같은 URL을 한 번만 집계합니다. 여러 사이트가 같은 원천을 인용할 수 있어 출처 수는 독립 검증 횟수가 아닙니다. 게시일·수집일·상태 조회일은 서로 다른 기준입니다.</p></details>
-    <div class="button-row lookup-source-actions"><button type="button" class="button primary small" data-action="enrichment-request" data-bno="${esc(number)}">웹 정보 수집 요청</button>${list(model.profile?.fields).length ? `<button type="button" class="button small" data-action="save-enrichment-note" data-bno="${esc(number)}">출처와 함께 거래처에 보관</button>` : ''}<button type="button" class="button small" data-action="enrichment-export" data-bno="${esc(number)}"${record ? '' : ' disabled'}>수집 자료 JSON</button></div>
+    <div class="button-row lookup-source-actions">${list(model.profile?.fields).length ? `<button type="button" class="button small" data-action="save-enrichment-note" data-bno="${esc(number)}">출처와 함께 거래처에 보관</button>` : ''}<button type="button" class="button small" data-action="enrichment-export" data-bno="${esc(number)}"${record ? '' : ' disabled'}>수집 자료 JSON</button><button type="button" class="text-button" data-action="enrichment-request" data-bno="${esc(number)}">공개자료 추가 요청 · GitHub</button></div>
+    <p class="fine-print">추가 요청은 GitHub의 공개 요청 작성 화면에서 제출합니다. 이 앱에서 즉시 자료가 수집되지는 않습니다.</p>
     <details id="lookup-discovery" class="lookup-discovery"><summary>외부 채널에서 더 찾아보기</summary><p class="fine-print">외부 검색 링크입니다. 검색결과가 수집되거나 동일 사업자로 확인된 것은 아닙니다.</p><div class="lookup-discovery-links">${discoveryLinks(number, model.publicName || '').map(item => sourceLink(item.url, item.name, 'enrichment-channel')).join('')}</div></details>`;
 }
 function renderHistory({ model }) {
@@ -185,10 +198,11 @@ export function renderBusinessWorkbench({ result, linked = null, model = null, r
   const partner = matchingLinked?.userName ? { businessNumber: number, name: matchingLinked.userName } : null;
   const profile = resolveBusinessProfile({ businessNumber: number, partner, record: matchingRecord, summary: matchingSummary });
   const insights = sameNumber(model, number) ? model : buildBusinessInsights({ businessNumber: number, check: result, partner, summary: profile.summary });
-  const context = { number, result, linked: profile, model: insights, record: matchingRecord, summary: profile.summary, loading, refreshing, commerce, registered };
+  const outcome = buildBusinessOutcome(insights);
+  const context = { number, result, linked: profile, model: insights, outcome, record: matchingRecord, summary: profile.summary, loading, refreshing, commerce, registered };
   const active = normalizeLookupTab(tab);
   const views = { overview: renderOverview, facts: renderFacts, sources: renderSources, history: renderHistory };
-  const notices = (refreshing ? '<p class="inline-loading" role="status"><span class="spinner" aria-hidden="true"></span> 사업자 상태를 다시 확인하고 있습니다. 이전 조회 결과를 표시합니다.</p>' : '') + statusNotice(result, insights.status || {}) + (loading ? '<p class="inline-loading" role="status"><span class="spinner" aria-hidden="true"></span> 공개자료를 불러오고 있습니다.</p>' : '') + (error ? `<p class="callout warning" role="status">${esc(error)}${profile.summary?.fields?.length ? ' 이전에 불러온 공개자료를 해당 수집시각과 함께 표시합니다.' : ''}</p>` : '');
+  const notices = (refreshing ? '<p class="inline-loading" role="status"><span class="spinner" aria-hidden="true"></span> 사업자 상태를 다시 확인하고 있습니다. 이전 조회 결과를 표시합니다.</p>' : '') + (active === 'overview' ? '' : statusNotice(result, outcome)) + (loading ? '<p class="inline-loading" role="status"><span class="spinner" aria-hidden="true"></span> 공개자료를 불러오고 있습니다.</p>' : '') + (error ? `<p class="callout" role="status">${esc(error)}${profile.summary?.fields?.length ? ' 이전에 불러온 공개자료를 해당 수집시각과 함께 표시합니다.' : ''} 공개자료 연결 문제는 업체의 등록 상태와 관계없습니다.</p>` : '');
   return `<section id="lookup-result" class="lookup-detail" data-business-number="${esc(number)}" aria-labelledby="lookup-result-title">
     ${renderHeader(context)}${notices ? `<div class="lookup-detail-notices">${notices}</div>` : ''}
     <div class="lookup-tabs" role="tablist" aria-label="선택한 사업자 상세정보">${LOOKUP_TABS.map(item => `<button type="button" id="lookup-tab-${item.id}" class="lookup-tab${active === item.id ? ' is-active' : ''}" role="tab" data-action="lookup-tab" data-tab="${item.id}" data-bno="${esc(number)}" aria-controls="lookup-panel-${item.id}" aria-selected="${active === item.id}" tabindex="${active === item.id ? '0' : '-1'}">${item.label}</button>`).join('')}</div>
