@@ -1557,3 +1557,25 @@ render();
 authClient=createAuthClient({publicConfig:window.BIZHANNUN_CONFIG?.auth,apiBase:window.BIZHANNUN_CONFIG?.apiBase||'',onStateChange:receiveAuthState});
 Promise.allSettled([checkHealth(),refreshPrograms(),refreshPublicIndex(),refreshStoreMetadata(),authClient.init()]);
 
+
+// Explicit common-vault backup of the visible workspace; legacy cloud accounts remain separate.
+window.SoftmSiteState=Object.freeze({
+  siteId:'bizhannun',
+  scope:()=>activeUid||'guest',
+  read(){
+    if(accountTransition||activeUid&&!cloudReady)throw Error('기존 계정의 작업공간을 먼저 불러와 주세요.');
+    return validateBackup({...workspace,preferences:{}});
+  },
+  validate:validateBackup,
+  async write(value){
+    if(activeUid||accountTransition)throw Error('기존 사업자 계정에서 로그아웃한 뒤 기기 모드에서 복원해 주세요. 원래 계정 자료는 유지됩니다.');
+    captureDetailDraft();
+    if(detailDrafts.size)throw Error('작성 중인 거래처 메모를 먼저 저장하거나 복사해 주세요.');
+    const next=validateBackup(value),current=await loadWorkspace();
+    if(activeUid||accountTransition)throw Error('계정이 바뀌어 복원을 중단했습니다.');
+    const restored=await saveWorkspace({...next,revision:current.revision,preferences:current.preferences});
+    if(activeUid||accountTransition)throw Error('계정이 바뀌었습니다. 복원 사본은 기기 모드에 보관했습니다.');
+    workspace=restored;guestWorkspace=structuredClone(restored);selected.clear();detailDrafts.clear();ui.profileDraft=null;
+    closeModal({discardDraft:true});render();toast('공통 보관소의 자료를 기기 작업공간에 복원했습니다.');
+  }
+});
