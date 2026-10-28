@@ -17,13 +17,17 @@ class FakeWorker {
 test('manifest loads once for metadata and searches, while the worker remains lazy', async () => {
   const source = fixture([[row('A', '커피')]]), worker = new FakeWorker();
   let workers = 0;
-  const client = createStoreCatalogClient({ manifestUrl: MANIFEST_URL, fetchImpl: source.fetchImpl,
+  const client = createStoreCatalogClient({ manifestUrl: MANIFEST_URL,
+    fetchImpl: (url, options) => options.credentials === 'same-origin'
+      ? source.fetchImpl(url, options) : new Response('Unauthorized', { status: 401 }),
     workerFactory: (url, options) => { workers++; assert.equal(options.type, 'module'); assert.match(url, /store-catalog-worker\.mjs$/); return worker; } });
   const [a, b] = await Promise.all([client.loadManifest(), client.loadManifest()]);
   assert.equal(a, b);
   assert.equal(Object.isFrozen(a), true);
   assert.equal(source.calls.length, 1);
   assert.equal(source.calls[0].options.cache, 'no-cache');
+  assert.equal(source.calls[0].options.credentials, 'same-origin');
+  assert.equal(source.calls[0].options.redirect, 'error');
   assert.equal(workers, 0);
   const pending = client.search('커피', { regionCode: '11', limit: 12 });
   await nextTask();

@@ -142,8 +142,9 @@ export function createStoreCatalogClient({
     // already-assigned promise, allowing the next attempt to retry normally.
     manifestPromise = Promise.resolve().then(async () => {
       try {
+        // Use an existing deployment session only for same-origin public assets.
         const response = await fetchImpl(manifestUrl, {
-          signal: controller.signal, cache: 'no-cache', credentials: 'omit', redirect: 'error',
+          signal: controller.signal, cache: 'no-cache', credentials: 'same-origin', redirect: 'error',
         });
         if (!response.ok) throw new StoreCatalogError('manifest_http_error',
           response.status === 404 ? '전국 상가 검색 자료가 아직 게시되지 않았습니다.' : `상가 검색 목록을 불러오지 못했습니다. (HTTP ${response.status})`);

@@ -103,10 +103,17 @@ test('invalid dates normalize to unknown, valid observations are idempotent and 
   assert.equal(summarizeEnrichment(input).profile.name, '변경상호');
 });
 
-test('snapshot loading matches exact BRN, sends no credentials, and returns honest missing coverage', async () => {
+test('snapshot loading uses only same-origin deployment credentials and retains exact BRN coverage', async () => {
   let options;
-  const loaded = await loadEnrichment(BNO, { fetcher: async (_url, init) => { options = init; return json({ businesses: [record()], meta: { generatedAt: stamp, arbitrarySecret: 'hidden' } }); } });
-  assert.equal(options.credentials, 'omit');
+  const loaded = await loadEnrichment(BNO, { url: 'https://preview.example.test/data/enrichment/index.json',
+    fetcher: async (_url, init) => {
+      options = init;
+      // Model a protected same-origin asset: omitting the page session fails.
+      return init.credentials === 'same-origin'
+        ? json({ businesses: [record()], meta: { generatedAt: stamp, arbitrarySecret: 'hidden' } })
+        : new Response('Unauthorized', { status: 401 });
+    } });
+  assert.equal(options.credentials, 'same-origin');
   assert.equal(loaded.summary.profile.name, '주식회사 테스트');
   assert.equal(loaded.meta.arbitrarySecret, undefined);
   const absent = await loadEnrichment('1048137225', { fetcher: async () => json({ businesses: [record()] }) });
@@ -194,7 +201,7 @@ test('catalog loading normalizes records, counts exclusions and whitelists metad
   });
   assert.equal(actualUrl, requestedUrl);
   assert.equal(options.signal, controller.signal);
-  assert.equal(options.credentials, 'omit');
+  assert.equal(options.credentials, 'same-origin');
   assert.equal(options.cache, 'no-cache');
   assert.equal(loaded.records[0].businessNumber, BNO);
   assert.equal(summarizeEnrichment(loaded.records[0]).profile.name, '주식회사 테스트');

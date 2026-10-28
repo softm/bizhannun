@@ -1078,7 +1078,7 @@ function changeLookupIntent(type,{fromSearch=false}={}) {
   focusTarget?.scrollIntoView({block:target?'start':'center',behavior:'instant'});
 }
 function numberHelpModal() {
-  openModal('사업자번호는 어디서 확인하나요?',`<div class="number-help-content"><p>사업자등록번호는 <strong>10자리</strong>입니다. 아래 자료에서 업체명과 함께 확인해 주세요.</p><ol><li><strong>거래처가 제공한 사업자등록증</strong><span>상호·주소도 함께 비교할 수 있습니다.</span></li><li><strong>세금계산서·영수증의 사업자번호</strong><span>주문번호나 상가업소번호와 혼동하지 마세요.</span></li><li><strong>거래처에 직접 문의</strong><span>번호를 모르면 이름만으로 국세청 상태를 확인할 수 없습니다.</span></li></ol><p class="callout">지금 살펴본 상가와 입력한 번호는 자동으로 연결되지 않습니다. 같은 업체인지 확인한 뒤 거래처에 저장하세요.</p></div><div class="modal-actions"><button type="button" class="button primary" data-action="close-modal">확인하고 돌아가기</button></div>`);
+  openModal('사업자번호는 어디서 확인하나요?',`<div class="number-help-content"><p>사업자등록번호는 <strong>10자리</strong>입니다. 아래 자료에서 업체명과 함께 확인해 주세요.</p><ol><li><strong>거래처가 제공한 사업자등록증</strong><span>상호·주소도 함께 비교할 수 있습니다.</span></li><li><strong>세금계산서·영수증의 사업자번호</strong><span>주문번호나 상가업소번호와 혼동하지 마세요.</span></li><li><strong>거래처에 직접 문의</strong><span>번호를 모르면 이름만으로 국세청 상태를 확인할 수 없습니다.</span></li></ol><p class="callout">상가 이름만으로 사업자번호를 연결하지 않습니다. 등록증에서 업체명·주소·번호를 함께 확인한 뒤 거래처에 저장하세요.</p></div><div class="modal-actions"><button type="button" class="button primary" data-action="close-modal">확인하고 돌아가기</button></div>`);
 }
 async function submitLookup(value,{refresh=false,type=ui.lookupType}={}){
   if(lookupComposing)return;

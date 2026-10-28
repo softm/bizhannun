@@ -86,8 +86,10 @@ async function verifiedGzip({ manifestUrl, manifest, file, signal, fetchImpl, cr
   url.searchParams.set('sha', file.sha256);
   try {
     throwIfAborted(signal);
+    // Same-origin routing/shard files share the authenticated deployment session;
+    // a catalog hosted on another origin still receives no browser credentials.
     const response = await fetchImpl(url.href, {
-      signal: controller.signal, cache: 'force-cache', credentials: 'omit', redirect: 'error',
+      signal: controller.signal, cache: 'force-cache', credentials: 'same-origin', redirect: 'error',
     });
     throwIfAborted(signal);
     if (!response.ok) throw new StoreCatalogError('http_error', `상가 검색 파일을 불러오지 못했습니다. (HTTP ${response.status})`);
