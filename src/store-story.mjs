@@ -5,6 +5,11 @@
  */
 const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char =>
   ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[char]);
+const sourceDateLabel = value => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return "기준일 미제공";
+  const parsed = new Date(value + "T00:00:00Z");
+  return Number.isFinite(+parsed) && parsed.toISOString().slice(0, 10) === value ? value : "기준일 미제공";
+};
 const sourceBrand = Object.freeze({
   name: "스타벅스",
   company: "주식회사 에스씨케이컴퍼니",
@@ -90,7 +95,7 @@ export function renderStoreStory(entry) {
     +externalLink(links.naverPhotos,"이 지점 사진 검색")+'</div>'
     +'<p class="store-story-caution">사진 검색 결과는 외부 자료이며, 이 업체·지점과 일치하는지 직접 확인해야 합니다.</p>'
     +'</div></div>'
-    +'<div class="store-story-grid"><section class="store-story-location"><div class="store-story-section-title"><h3>위치와 방문 정보</h3><span>상가 명부 '+escapeHtml(entry.sourceDate || "기준일 확인")+'</span></div>'
+    +'<div class="store-story-grid"><section class="store-story-location"><div class="store-story-section-title"><h3>위치와 방문 정보</h3><span>상가 명부 '+escapeHtml(sourceDateLabel(entry.sourceDate))+'</span></div>'
     +'<p class="store-story-address">'+escapeHtml(address || "주소 미제공")+'</p>'
     +'<dl class="store-story-stat"><div><dt>업종</dt><dd>'+escapeHtml(category)+'</dd></div>'
     +'<div><dt>좌표</dt><dd>'+(links.hasCoordinates ? escapeHtml(links.lat.toFixed(5)+", "+links.lon.toFixed(5)) : "미제공")+'</dd></div>'
