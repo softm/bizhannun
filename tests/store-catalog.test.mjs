@@ -181,6 +181,24 @@ test('decoded byte LRU is strictly bounded and version changes cannot reuse an o
   engine.close(); assert.equal(engine.cacheStats().bytes, 0);
 });
 
+test('protected same-origin routing and shard assets use the page session without allowing redirects', async () => {
+  const source = fixture([[row('A', '커피')]]);
+  const manifestUrl = 'https://preview.example.test/bizhannun/data/store-catalog/manifest.json';
+  const engine = source.engine({ fetchImpl: (url, options) => options.credentials === 'same-origin'
+    ? source.fetchImpl(url, options) : new Response('Unauthorized', { status: 401 }) });
+  const result = await engine.search({ manifest: source.manifest, manifestUrl, query: '커피' });
+  assert.equal(result.complete, true);
+  assert.equal(result.total, 1);
+  assert.equal(source.calls.length, 2);
+  assert.deepEqual(new Set(source.calls.map(call => call.path)), new Set(['routing.json.gz', source.manifest.shards[0].path]));
+  for (const call of source.calls) {
+    assert.equal(new URL(call.url).origin, new URL(manifestUrl).origin);
+    assert.equal(call.options.credentials, 'same-origin');
+    assert.equal(call.options.redirect, 'error');
+  }
+  engine.close();
+});
+
 test('one missing region shard yields explicit partial scope and never a definitive total', async () => {
   const source = fixture([[row('A', '커피')], [row('B', '커피', { region: '26' })]]), engine = source.engine();
   source.files.delete(source.manifest.shards[1].path);

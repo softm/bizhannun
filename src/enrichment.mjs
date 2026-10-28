@@ -210,7 +210,9 @@ async function readBoundedJson(response) {
 /** Read one bounded, validated public snapshot for name search and every number-based view. */
 export async function loadEnrichmentCatalog({ fetcher = globalThis.fetch,
   url = new URL('../data/enrichment/index.json', import.meta.url), signal } = {}) {
-  const response = await fetcher(url, { cache: 'no-cache', credentials: 'omit', ...(signal ? { signal } : {}) });
+  // Protected deployments require the page session for their own static assets.
+  // The browser still excludes credentials from cross-origin snapshot URLs.
+  const response = await fetcher(url, { cache: 'no-cache', credentials: 'same-origin', ...(signal ? { signal } : {}) });
   if (response.status === 404) return { records: [], meta: {
     status: 'not_collected', loadedCount: 0, inputCount: 0, excludedCount: 0,
     generatedAt: null, collectedAt: null,
