@@ -130,6 +130,8 @@ jobs:
           NTS_SERVICE_KEY: ${{ secrets.NTS_SERVICE_KEY }}
         run: npm run build
 
+      - name: Include app-ads.txt in Pages
+        run: cp app-ads.txt dist/app-ads.txt
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
