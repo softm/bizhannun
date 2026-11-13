@@ -728,3 +728,10 @@
 .store-story-operator .button{min-height:44px}
 @media(max-width:840px){.store-story-hero{grid-template-columns:1fr}.store-story-hero-copy{padding:16px 20px 22px}.store-story-media img{max-height:300px}.store-story-grid{grid-template-columns:1fr}}
 @media(max-width:700px){.store-story{padding:0 16px 16px}.store-story-hero-copy h3{font-size:20px}.store-story-media img{min-height:220px;max-height:260px}.store-story-media figcaption{font-size:10px}.store-story-grid{gap:12px;margin-top:12px}.store-story-grid>section,.store-story-operator{padding:15px}.store-story-operator{margin-top:12px}.store-story-links a,.store-story-links button{flex:1 1 145px;text-align:center}.store-story-map iframe{min-height:220px}.store-story-stat>div{grid-template-columns:80px minmax(0,1fr)}}
+
+/* Cloudflare identity is hosted in the shared account menu; reserve a stable
+   hit target even when BusinessHannun rerenders its header. */
+.cloudflare-account-slot{display:inline-flex;align-items:center;justify-content:center;flex:0 0 44px;min-width:44px;min-height:44px}
+.cloudflare-account-panel{margin-bottom:20px;max-width:100%}
+.cloudflare-account-panel h2{margin:6px 0 10px}
+.cloudflare-account-panel .button{margin-top:12px}

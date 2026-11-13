@@ -63,7 +63,7 @@ const number = value => new Intl.NumberFormat('ko-KR').format(value || 0);
 const regions = ['서울','부산','대구','인천','광주','대전','울산','세종','경기','강원','충북','충남','전북','전남','경북','경남','제주'];
 const regionSummary = values => !values?.length ? '지역 원문 확인' : values.includes('전국') || regions.every(region=>values.includes(region)) ? '전국' : values.slice(0,3).join(' · ')+(values.length>3?` 외 ${values.length-3}개 지역`:'');
 const statusNames = {active:'계속사업자',suspended:'휴업자',closed:'폐업자',unknown:'미확인'};
-const titles = {lookup:'사업자 조회',partners:'거래처 관리',programs:'지원사업 찾기',profile:'내 사업',history:'변경 기록',account:'계정 · 동기화',data:'데이터 현황'};
+const titles = {lookup:'사업자 조회',partners:'거래처 관리',programs:'지원사업 찾기',profile:'내 사업',history:'변경 기록',account:'이전 자료',data:'데이터 현황'};
 const navItems = [['lookup','search'],['partners','folder'],['programs','spark'],['profile','building'],['history','clock'],['account','user'],['data','database']];
 let workspace = emptyWorkspace();
 let guestWorkspace = emptyWorkspace();
@@ -265,11 +265,22 @@ function workspaceNotice(){
   if(activeUid&&!cloudReady)return `<div class="callout warning storage-warning"><span>${esc(accountError||'계정 저장소 연결을 확인해 주세요.')} <button class="text-button" data-nav="account">계정 상태 확인</button></span></div>`;
   return '';
 }
+function cloudflareAccountIntro() {
+  const user=window.SoftmAccounts?.get('bizhannun')?.currentUser;
+  const status=user?esc(user.displayName||'로그인된 계정'):'로그인 전';
+  return `<section class="card account-card cloudflare-account-panel" aria-label="공통 Cloudflare 계정">
+    <div class="eyebrow">SOFTM CLOUDFLARE ACCOUNT</div>
+    <h2>공통 계정 · ${status}</h2>
+    <p class="fine-print">Google·카카오 계정으로 로그인·회원가입하고, 연결된 SNS 프로필은 상단 계정 아이콘에서 확인하세요. 네이버는 공개 승인 여부에 따라 제공됩니다.</p>
+    <button class="button primary" data-action="cloudflare-account-open">${user?'공통 계정 메뉴 열기':'로그인 · 회원가입'}</button>
+    <p class="fine-print" style="margin-top:12px">공통 계정과 이 화면 아래의 기존 Firebase 기록은 서로 다른 저장소입니다. 거래처·메모·사업 프로필은 자동 이전하거나 덮어쓰지 않습니다.</p>
+  </section>`;
+}
 function accountView(){
   const user=authState.user,busy=authBusy()||saving,sync=accountStorageStatus();
   if(user){
     const guestCount=guestWorkspace.partners.length,hasGuest=guestCount||guestWorkspace.events.length||guestWorkspace.checks.length||Object.keys(guestWorkspace.profile||{}).length;
-    return pageHeading('내 계정, 이어지는 기록','거래처와 사업 정보를 같은 계정으로 다른 기기에서도 확인하세요.')+`
+    return cloudflareAccountIntro()+pageHeading('기존 Firebase 기록','거래처와 사업 정보를 같은 계정으로 다른 기기에서도 확인하세요.')+`
     <div class="account-layout"><section class="card account-card">
       <div class="account-identity"><span class="account-avatar">${icon('user')}</span><div><h2>${esc(userLabel())}</h2><p class="fine-print">${esc(user.email||'SNS로 로그인한 계정')}</p></div><span class="badge positive dot">로그인됨</span></div>
       <div class="divider"></div><h3>계정에 보관하는 정보</h3><p class="fine-print">거래처, 메모·태그, 사업 프로필, 조회 이력과 변경 기록을 Firestore에 저장합니다. 로그인한 본인 계정에서만 읽고 수정할 수 있습니다.</p>
@@ -282,8 +293,8 @@ function accountView(){
     ${accountNotice?`<div class="callout section-spacer" role="status"><span>${esc(accountNotice)}</span></div>`:''}`;
   }
   const providers=[['kakao','카카오로 시작하기','K'],['naver','네이버로 시작하기','N'],['google','Google로 시작하기','G']];
-  return pageHeading('어디서든, 내 사업의 기록','로그인하면 거래처·메모·프로필·조회 이력이 계정에 저장됩니다.')+`
-  <div class="account-layout"><section class="card account-card signin-card"><h2>간편하게 로그인</h2><p class="fine-print">같은 계정으로 로그인해 다른 기기에서도 이어서 사용하세요.</p>
+  return cloudflareAccountIntro()+pageHeading('기존 Firebase 계정 · 자료 확인','로그인하면 거래처·메모·프로필·조회 이력이 계정에 저장됩니다.')+`
+  <div class="account-layout"><section class="card account-card signin-card"><h2>기존 Firebase 로그인</h2><p class="fine-print">이전 Firebase 저장 기록을 확인할 때 사용하세요. 새 Cloudflare 로그인은 상단 프로필 아이콘에서 진행합니다.</p>
     <div class="social-buttons">${providers.map(([key,label,mark])=>`<button class="social-button ${key}" data-action="auth-provider" data-provider="${key}" ${busy||!authState.providers?.[key]?.configured?'disabled':''}><span class="social-mark">${mark}</span><span>${label}</span>${!authState.providers?.[key]?.configured?'<small>준비 중</small>':''}</button>`).join('')}</div>
     ${authState.phase==='initializing'?'<div class="inline-loading"><span class="spinner"></span>로그인 연결 확인 중</div>':''}
     ${authState.error?`<div class="callout warning"><span>${esc(authState.error)}</span></div>`:''}
@@ -293,6 +304,7 @@ function accountView(){
   </section><section class="card account-card account-benefits"><div class="account-hero-icon">${icon('shield')}</div><h2>정보도 함께 저장합니다</h2><div class="guide-step"><span class="step-number">01</span><div><h3>거래처와 메모</h3><p>거래처, 분류 태그와 업무 메모를 계정에 보관합니다.</p></div></div><div class="guide-step"><span class="step-number">02</span><div><h3>조회 이력과 내 사업</h3><p>사업자 상태 조회와 변경 기록, 지원사업 탐색용 프로필을 함께 저장합니다.</p></div></div><div class="guide-step"><span class="step-number">03</span><div><h3>기존 자료 이어 쓰기</h3><p>이 브라우저의 자료는 로그인 후 가져오기로 옮길 수 있습니다.</p></div></div><div class="divider"></div><p class="fine-print">로그인 없이도 이 기기에 저장하며 사용할 수 있습니다. 로그아웃 상태의 자료는 다른 기기와 동기화되지 않습니다.</p><button class="button section-spacer" data-nav="partners">이 기기에서 계속하기 ${icon('arrow')}</button></section></div>`;
 }
 async function handleAccountAction(action,element){
+  if(action==='cloudflare-account-open'){if(window.BizHannunCloudflare?.open)window.BizHannunCloudflare.open();else toast('공통 로그인 메뉴를 아직 불러오지 못했습니다. 운영 주소에서 새로고침해 주세요.',true);return true;}
   if(action==='auth-return-profile'){closeModal();go('profile');return true;}
   if(action==='auth-provider'){if(blockLoginForProfileDraft())return true;await runAuth(()=>authClient.signIn(element.dataset.provider));return true;}
   if(action==='auth-retry'){await authClient.init();return true;}
@@ -354,14 +366,14 @@ function shell(content) {
     <div class="brand-sub">BUSINESS AT A GLANCE</div>
     <nav>${nav}</nav>
     <div class="side-spacer"></div>
-    <div class="local-card">${icon('shield')}<div><strong>${authState.user?'내 계정에 보관':'이 기기에 보관'}</strong>${authState.user?esc(accountStorageStatus().label):'로그인하면 다른 기기에서도<br>내 기록을 이어서 볼 수 있어요.'}</div></div>
+    <div class="local-card">${icon('shield')}<div><strong>${authState.user?'기존 Firebase 계정':'이 기기에 보관'}</strong>${authState.user?esc(accountStorageStatus().label):'로그인하면 다른 기기에서도<br>내 기록을 이어서 볼 수 있어요.'}</div></div>
     <div class="side-foot"><span>© bizhannun</span><span>v0.8</span></div>
   </aside>
   <div class="main-wrap">
     <header class="topbar">
       <div class="mobile-header-left"><button class="icon-button mobile-nav-toggle" data-action="toggle-menu" aria-label="메뉴 열기" aria-expanded="${ui.mobileMenu}">${icon('menu')}</button><a class="brand mobile-brand" href="./#lookup" data-nav="lookup"><img class="brand-mark" src="./assets/favicon.svg" alt="">사업자한눈</a></div>
       <div class="breadcrumb">내 워크스페이스 ${icon('chevron')} <span>${titles[view]}</span></div>
-      <div class="top-tools"><span class="date-label">${new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'long',day:'numeric',weekday:'long'}).format(new Date())}</span><button class="icon-button notice-button" data-action="goto-history" aria-label="변경 기록 보기">${icon('bell')}${workspace.events.some(e=>!e.acknowledgedAt)?'<span class="notification-count">!</span>':''}</button><button class="account-trigger" data-nav="account"><span class="avatar">${icon('user')}</span><span>${authState.user?esc(userLabel()):'로그인'}</span></button></div>
+      <div class="top-tools"><span class="date-label">${new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'long',day:'numeric',weekday:'long'}).format(new Date())}</span><button class="icon-button notice-button" data-action="goto-history" aria-label="변경 기록 보기">${icon('bell')}${workspace.events.some(e=>!e.acknowledgedAt)?'<span class="notification-count">!</span>':''}</button><span id="siteAccountSlot" class="cloudflare-account-slot"></span></div>
     </header>
     <main class="main-content" id="main-content" tabindex="-1">${workspaceNotice()}${storageError?`<div class="callout error storage-warning">${icon('info')}<span>${esc(storageError)} 현재 변경사항을 저장하지 못할 수 있습니다.</span></div>`:''}${content}${footer()}</main>
   </div></div>`;
@@ -1611,6 +1623,7 @@ window.addEventListener('beforeunload',event=>{
   if(detailDrafts.size){event.preventDefault();event.returnValue='';}
 });
 window.addEventListener('afterprint',()=>document.body.classList.remove('printing-business-detail'));
+window.addEventListener('bizhannun:cloudflare-account-changed',()=>{if(ui.view==='account')render();});
 window.addEventListener('hashchange',()=>{
   const view=location.hash.slice(1).split('?')[0];
   if(titles[view]){interactionEpoch++;ui.view=view;ui.mobileMenu=false;if(modal)closeModal();render();}

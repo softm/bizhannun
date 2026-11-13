@@ -36,6 +36,7 @@ v0.4의 수집 정보는 출처·확인 시각을 포함해 거래처와 내 사
 - 구현·배포 검증과 화면 기록: [docs/VERIFICATION.md](docs/VERIFICATION.md)
 - 로그인·Firestore·국세청 키 연결: [docs/AUTH_SETUP.md](docs/AUTH_SETUP.md)
 - 2026-10-28 공통 로그인·사이트별 보관소: [docs/COMMON-VAULT.md](docs/COMMON-VAULT.md)
+- 2026-11-13 Cloudflare SNS 로그인·회원가입 및 기존 Firebase 자료 분리: [docs/CLOUDFLARE_ACCOUNT.md](docs/CLOUDFLARE_ACCOUNT.md)
 - 카카오·네이버 앱 등록과 서버 설정: [docs/SOCIAL_AUTH.md](docs/SOCIAL_AUTH.md)
 - 초기 제품 기획: [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md). 구현 완료 목록이 아닌 확장 방향을 담은 기획 문서입니다.
 
