@@ -1,0 +1,8 @@
+{
+  "provider": "ftc",
+  "lastAttemptAt": "2026-11-16T14:16:26Z",
+  "lastSuccessAt": null,
+  "status": "not_configured",
+  "source": "https://www.data.go.kr/data/15126311/openapi.do",
+  "message": "FTC_SERVICE_KEY 미설정: 이전 공개 데이터 유지"
+}
