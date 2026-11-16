@@ -34,7 +34,7 @@ test('공개자료만 검색하고 전체 사업자 명부로 오인하지 않�
 test('미게시·손상된 검색자료는 추측한 등록번호를 표시하지 않는다',async()=>{
   const client=createRegistrationCatalog({baseUrl:base,fetchImpl:async()=>new Response('',{status:404})});
   assert.equal((await client.search('다')).status,'not_collected');
-  assert.equal(renderRegistrationCatalog({query:'다',state:{result:await client.search('다')}}),'');
+  assert.match(renderRegistrationCatalog({query:'다',state:{result:await client.search('다')}}),/아직 게시되지/);
   assert.throws(()=>validateRegistrationManifest({schemaVersion:1,recordCount:1,shards:[],routing:{path:'../secrets'},source:{url:'https://evil.example'}}));
   const html=renderRegistrationCatalog({query:'x',state:{result:{status:'ready',items:[{businessNumber:'2208162517',name:'<img src=x>',address:'<script>'}],total:1,complete:true}}});
   assert.doesNotMatch(html,/<script>/);
