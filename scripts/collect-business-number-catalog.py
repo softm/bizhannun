@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "data/business-numbers"
 STATUS = ROOT / "data/business-number-status.json"
 SOURCE = "https://www.data.go.kr/data/15126311/openapi.do"
+SOURCE_CSV = "https://www.data.go.kr/data/15083251/fileData.do"
 ENDPOINT = "https://apis.data.go.kr/1130000/MllBs_2Service/getMllBsInfo_2"
 FIELDS = {
     "number": ("사업자등록번호", "사업자번호", "brno", "bizno", "b_no", "businessNumber"),
@@ -249,7 +250,7 @@ def publish(rows, destination, *, source, now):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--csv", type=Path, help="이용 가능한 공식 공개 CSV 파일")
+    p.add_argument("--csv", action="append", type=Path, help="공식 공개 지역별 CSV 파일, 여러 번 지정 가능")
     p.add_argument("--strict", action="store_true")
     args = p.parse_args()
     now = utcnow()
@@ -259,8 +260,10 @@ def main():
               "source": SOURCE}
     try:
         if args.csv:
-            raw = collect_csv(args.csv)
-            origin = {"name": "공정거래위원회 공식 CSV", "url": SOURCE}
+            raw = []
+            for csv_path in args.csv:
+                raw.extend(collect_csv(csv_path))
+            origin = {"name": "공정거래위원회 공식 CSV", "url": SOURCE_CSV}
         else:
             key = os.environ.get("FTC_SERVICE_KEY", "")
             if not key:
@@ -268,6 +271,18 @@ def main():
                 write_json(STATUS, status)
                 print(status["message"])
                 return
+            # A full nationwide crawl is expensive. Once weekly is enough for
+            # a public registration search index; daily Pages runs reuse it.
+            last_success = previous.get("lastSuccessAt")
+            if last_success:
+                try:
+                    age = dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(last_success.replace("Z", "+00:00"))
+                except ValueError:
+                    age = dt.timedelta(days=999)
+                if age < dt.timedelta(days=6) and (OUTPUT / "manifest.json").exists():
+                    status.update({"status": "unchanged", "message": "주간 수집 주기 내: 정상 공개 JSON 유지"})
+                    write_json(STATUS, status)
+                    return
             raw = collect_api(key)
             origin = {"name": "공정거래위원회 통신판매업 등록현황", "url": SOURCE}
         manifest = publish(raw, OUTPUT, source=origin, now=now)
