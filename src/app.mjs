@@ -103,6 +103,8 @@ const storeClient = createStoreCatalogClient();
 const registrationClient = createRegistrationCatalog();
 let registrationSerial = 0, registrationAbort = null;
 let registrationSearch = { query:'',result:null,loading:false,error:'' };
+let registrationMeta = null, registrationStatus = {}, registrationMetaError = '', registrationMetaLoading = false;
+let registrationMetaPromise = null;
 let storeManifest = null, storeStatus = {}, storeMetadataError = '', storeMetadataLoading = false;
 let storeMetadataPromise = null, storeSerial = 0;
 let storeSearch = { query:'', result:null, loading:false, error:'', regionCode:'', selected:null, page:1 };
@@ -565,6 +567,20 @@ async function searchStoreCatalog(query,{regionCode=storeSearch.regionCode,refre
   } finally {if(serial===storeSerial){storeSearch.loading=false;render();}}
 }
 
+async function refreshRegistrationMetadata({force=false}={}) {
+  if(registrationMetaPromise)return registrationMetaPromise;
+  registrationMetaLoading=true;
+  registrationMetaPromise=(async()=>{
+    try{registrationMeta=await registrationClient.load({force});registrationMetaError='';}
+    catch(error){registrationMetaError=error.message;}
+    try{
+      const response=await fetch('./data/business-number-status.json',{cache:'no-cache',signal:AbortSignal.timeout(15000)});
+      if(response.ok)registrationStatus=await response.json();
+    }catch{/* Missing status file does not prevent old snapshots from being searched. */}
+    registrationMetaLoading=false;registrationMetaPromise=null;render();
+  })();
+  return registrationMetaPromise;
+}
 async function searchRegistrationCatalog(query,{refresh=false}={}) {
   const serial=++registrationSerial;
   registrationAbort?.abort();
@@ -718,6 +734,12 @@ function dataView() {
   return pageHeading('데이터는 투명하게, 판단은 정확하게','실제 연결 상태와 수집 결과, 데이터의 출처·기준일을 확인하세요.',`<div class="button-row"><button class="button" data-action="refresh-health">${icon('refresh')} 상태 새로고침</button></div>`)+`
   <div class="callout">${icon('info')}<span>API 설정 여부와 실제 조회 성공은 다릅니다. 개별 사업자 화면에는 <strong>조회 응답·출처·조회시각</strong>을 함께 표시합니다.</span></div>
   <div class="callout collection-highlight">${icon('clock')}<span><strong>국세청 조회: 조회 버튼을 누를 때 확인</strong><br>원천 정보 갱신은 30분 주기이며 신규 개업자는 1~2일이 걸릴 수 있습니다. 앱의 최근 조회시각과 구분해 확인하세요.</span></div>
+  <section class="card store-catalog-status section-spacer" aria-labelledby="registration-status-title">
+    <div class="store-catalog-header"><div><h2 id="registration-status-title">사업자등록번호 공개자료</h2><p>공정거래위원회 통신판매업 공개 등록자료를 JSON으로 수집합니다. 전국 모든 사업자 명부는 아닙니다.</p></div><span class="badge ${registrationMeta?'positive':registrationStatus.status==='failed'?'warning':'neutral'}">${registrationMetaLoading?'불러오는 중':registrationMeta?'번호 자료 수집됨':registrationStatus.status==='not_configured'?'API 키 설정 필요':'자료 미게시'}</span></div>
+    <div class="store-catalog-status-summary"><span>확인된 공개 등록번호 <strong>${number(registrationMeta?.recordCount||0)}건</strong></span><span>최종 수집 <strong>${esc(fmtTime(registrationStatus.lastSuccessAt||registrationMeta?.generatedAt))}</strong></span></div>
+    ${registrationMetaError||registrationStatus.message?'<p class="fine-print">'+esc(registrationMetaError||registrationStatus.message)+'</p>':''}
+    <p class="fine-print">${external('https://www.data.go.kr/data/15126311/openapi.do','공정위 등록현황 원천')} · 상호와 주소가 유사하다는 이유만으로 기존 상가 명부에 번호를 자동 연결하지 않습니다.</p>
+  </section>
   ${renderStoreCatalogStatus({manifest:storeManifest,status:storeStatus,error:storeMetadataError,loading:storeMetadataLoading})}
   ${publicCollectionView()}
   <div class="section-spacer source-list">${rows.map(r=>`<section class="card source-card"><div><h3>${r.name}</h3><p>${r.description}</p></div><div class="source-status"><span class="badge ${r.tone} dot">${r.value}</span>${external(r.url,'출처','button small')}</div></section>`).join('')}</div>
@@ -1614,7 +1636,7 @@ document.addEventListener('click',async event=>{
     const events=workspace.events.map(e=>(action==='acknowledge-all'||e.id===id)&&!e.acknowledgedAt?{...e,acknowledgedAt:new Date().toISOString()}:e);
     if(await persist({...workspace,events}))toast('확인한 기록으로 표시했습니다.');return;
   }
-  if(action==='refresh-health'){await Promise.allSettled([checkHealth(),refreshPublicIndex({force:true}),refreshStoreMetadata({force:true})]);return;}
+  if(action==='refresh-health'){await Promise.allSettled([checkHealth(),refreshPublicIndex({force:true}),refreshStoreMetadata({force:true}),refreshRegistrationMetadata({force:true})]);return;}
   if(action==='connection-settings'){connectionModal();return;}
   if(action==='validate-open'){validateModal();return;}
   if(action==='privacy'){privacyModal();return;}
@@ -1662,7 +1684,7 @@ catch(error){storageError='이 브라우저에서 기록을 불러오지 못했�
 if(!titles[ui.view])ui.view='lookup';
 render();
 authClient=createAuthClient({publicConfig:window.BIZHANNUN_CONFIG?.auth,apiBase:window.BIZHANNUN_CONFIG?.apiBase||'',onStateChange:receiveAuthState});
-Promise.allSettled([checkHealth(),refreshPrograms(),refreshPublicIndex(),refreshStoreMetadata(),authClient.init()]);
+Promise.allSettled([checkHealth(),refreshPrograms(),refreshPublicIndex(),refreshStoreMetadata(),refreshRegistrationMetadata(),authClient.init()]);
 
 
 // Explicit common-vault backup of the visible workspace; legacy cloud accounts remain separate.
