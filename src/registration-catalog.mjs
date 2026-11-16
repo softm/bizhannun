@@ -84,7 +84,7 @@ export function createRegistrationCatalog({baseUrl=new URL('../data/business-num
 export function renderRegistrationCatalog({query='',state={}}={}){
   if(!query)return '';
   const result=state.result,rows=result?.items||[];
-  if(!state.loading&&!state.error&&result?.status==='not_collected')return '';
+  if(!state.loading&&!state.error&&result?.status==='not_collected')return '<section class="card business-search-results" aria-labelledby="registration-results-title"><h2 id="registration-results-title">사업자등록번호 공개자료</h2><p>공식 자료의 등록번호 검색 인덱스가 아직 게시되지 않았습니다. <a href="./data-status.html">데이터 수집 상태 확인</a></p></section>';
   const partial=result?.status==='ready'&&!result.complete;
   const label=state.loading?'공개 등록번호 검색 중':state.error||'공개자료 '+count(result?.total)+'건'+(partial?' 이상':'');
   return '<section class="card business-search-results" aria-labelledby="registration-results-title" aria-busy="'+Boolean(state.loading)+'">'+
