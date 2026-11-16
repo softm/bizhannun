@@ -10,6 +10,7 @@ import { renderBusinessInsights } from './business-insights-view.mjs';
 import { classifyBusinessQuery, buildBusinessSearchIndex, searchBusinesses } from './business-search.mjs';
 import { renderBusinessSearch } from './business-search-view.mjs';
 import { createStoreCatalogClient } from './store-catalog-client.mjs';
+import { createRegistrationCatalog, renderRegistrationCatalog } from './registration-catalog.mjs';
 import { renderStoreCatalogSearch, renderStoreCatalogDetail, renderStoreCatalogStatus } from './store-catalog-view.mjs';
 import { createLookupOrigin, restoreLookupOrigin } from './lookup-journey.mjs';
 import { operatorEvidenceForStore } from './store-story.mjs';
@@ -99,6 +100,9 @@ let lookupSerial = 0;
 let interactionEpoch = 0;
 let businessIndexCache = null;
 const storeClient = createStoreCatalogClient();
+const registrationClient = createRegistrationCatalog();
+let registrationSerial = 0, registrationAbort = null;
+let registrationSearch = { query:'',result:null,loading:false,error:'' };
 let storeManifest = null, storeStatus = {}, storeMetadataError = '', storeMetadataLoading = false;
 let storeMetadataPromise = null, storeSerial = 0;
 let storeSearch = { query:'', result:null, loading:false, error:'', regionCode:'', selected:null, page:1 };
@@ -508,9 +512,11 @@ function nameSearchView() {
   const {index,result}=currentNameSearch();
   const known=result.total||ui.nameSearchBusy||ui.nameSearchError?renderBusinessSearch({query:ui.nameQuery,index,result,loading:ui.nameSearchBusy,error:ui.nameSearchError,
     meta:publicMeta,selectedNumber:ui.lookupSelection?.businessNumber||''}):'';
-  return `${known}<div id="store-search-area">${renderStoreCatalogSearch({...storeSearch,manifest:storeManifest,selectedId:storeSearch.selected?.id})}</div>`;
+  return `${known}<div id="registration-search-area">${renderRegistrationCatalog({query:ui.nameQuery,state:registrationSearch})}</div><div id="store-search-area">${renderStoreCatalogSearch({...storeSearch,manifest:storeManifest,selectedId:storeSearch.selected?.id})}</div>`;
 }
 function resetStoreSearch() {
+  registrationSerial++;registrationAbort?.abort();registrationAbort=null;
+  registrationSearch={query:'',result:null,loading:false,error:''};
   storeSerial++;storeClient.cancel();
   storeSearch={query:'',result:null,loading:false,error:'',regionCode:'',selected:null,page:1};
 }
@@ -557,6 +563,22 @@ async function searchStoreCatalog(query,{regionCode=storeSearch.regionCode,refre
     if(serial!==storeSerial||error.name==='AbortError')return;
     storeSearch.error=error.message;
   } finally {if(serial===storeSerial){storeSearch.loading=false;render();}}
+}
+
+async function searchRegistrationCatalog(query,{refresh=false}={}) {
+  const serial=++registrationSerial;
+  registrationAbort?.abort();
+  const controller=new AbortController();registrationAbort=controller;
+  registrationSearch={query,result:null,loading:true,error:''};
+  render();
+  try {
+    const result=await registrationClient.search(query,{signal:controller.signal});
+    if(serial===registrationSerial)registrationSearch.result=result;
+  } catch(error) {
+    if(serial===registrationSerial&&!controller.signal.aborted)registrationSearch.error=error.message;
+  } finally {
+    if(serial===registrationSerial){registrationSearch.loading=false;registrationAbort=null;render();}
+  }
 }
 
 function lookupResultView() {
@@ -1117,6 +1139,7 @@ async function submitLookup(value,{refresh=false,type=ui.lookupType}={}){
   if(parsed.kind==='number'){await lookup(parsed.businessNumber);return;}
   ui.nameQuery=parsed.query;ui.nameSearchBusy=true;render();
   const storeTask=searchStoreCatalog(parsed.query,{refresh});
+  const registrationTask=searchRegistrationCatalog(parsed.query,{refresh});
   try{if(!await refreshPublicIndex({force:refresh}))throw new Error(publicIndexError);}
   catch{
     if(serial!==lookupSerial)return;
@@ -1127,7 +1150,7 @@ async function submitLookup(value,{refresh=false,type=ui.lookupType}={}){
       if(interaction===interactionEpoch&&!lookupComposing&&!modal&&ui.view==='lookup'&&ui.lookupQuery===String(value??''))(document.getElementById('name-results-title')||document.getElementById('store-results-title'))?.focus({preventScroll:true});
     }
   }
-  await storeTask;
+  await Promise.all([storeTask,registrationTask]);
 }
 async function lookup(value,{candidate=null,preserveContext=false}={}) {
   if(!candidate&&!preserveContext)resetStoreSearch();
@@ -1456,6 +1479,11 @@ document.addEventListener('click',async event=>{
     lookupSerial++;interactionEpoch++;clearLookupResult();render();
     const target=document.getElementById('name-results-title')||document.getElementById('business-query');
     target?.focus({preventScroll:true});target?.scrollIntoView({block:'nearest',behavior:'instant'});return;
+  }
+  if(action==='select-registration-result'){
+    const entry=registrationSearch.result?.items?.find(item=>item.businessNumber===element.dataset.number);
+    if(entry){await lookup(entry.businessNumber,{candidate:entry});}
+    return;
   }
   if(action==='select-store-result'){
     const entry=storeSearch.result?.results.find(item=>item.id===element.dataset.id);
