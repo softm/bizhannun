@@ -77,15 +77,15 @@ def normalized_name(value):
     text = unicodedata.normalize("NFKC", str(value or "")).lower().strip()
     for _ in range(4):
         before = text
-        text = re.sub(r"^(?:주식회사|유한회사|유한책임회사|\\(주\\))\\s*", "", text)
-        text = re.sub(r"\\s*(?:주식회사|유한회사|유한책임회사|\\(주\\))$", "", text)
+        text = re.sub(r"^(?:주식회사|유한회사|유한책임회사|\(주\))\s*", "", text)
+        text = re.sub(r"\s*(?:주식회사|유한회사|유한책임회사|\(주\))$", "", text)
         if text == before:
             break
-    return re.sub(r"\\s+", "", text)
+    return re.sub(r"\s+", "", text)
 
 
 def clean(value, maximum=200):
-    return re.sub(r"\\s+", " ", re.sub(r"[\\x00-\\x1f\\x7f]", " ", str(value or ""))).strip()[:maximum]
+    return re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", " ", str(value or ""))).strip()[:maximum]
 
 
 def normalize_row(raw):
