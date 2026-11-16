@@ -108,7 +108,8 @@ jobs:
             echo "main changed during validation. Stop without merging or overwriting; run again against the new main."
             exit 1
           fi
-          git add -- 'data/*.json' 'data/enrichment/index.json' 'config/business-sources.json' 'data/store-catalog/' 'data/business-numbers/'
+          git add -- 'data/*.json' 'data/enrichment/index.json' 'config/business-sources.json' 'data/store-catalog/'
+          if [[ -d data/business-numbers ]]; then git add -- data/business-numbers/; fi
           if git diff --cached --quiet; then
             echo "Public evidence and data are unchanged."
             exit 0
