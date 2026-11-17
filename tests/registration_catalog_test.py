@@ -1,5 +1,7 @@
 import importlib.util
 import gzip
+import io
+import urllib.error
 import json
 import tempfile
 import unittest
@@ -38,6 +40,15 @@ class RegistrationCollectorTest(unittest.TestCase):
                 module.publish([rows[0]],out,source={"name":"공식시험자료","url":module.SOURCE},
                                now="2026-11-17T00:00:00Z")
             self.assertEqual(json.loads((out/"manifest.json").read_text())["recordCount"],2)
+
+    def test_auth_error_does_not_leak_secret(self):
+        error = urllib.error.HTTPError(
+            "https://apis.data.go.kr/test?serviceKey=TOPSECRET", 403,
+            "Forbidden", {}, io.BytesIO(b"SERVICE_KEY_IS_NOT_REGISTERED_ERROR"))
+        message = module.describe_http_error(error)
+        self.assertIn("SERVICE_KEY_IS_NOT_REGISTERED_ERROR", message)
+        self.assertIn("15126311", message)
+        self.assertNotIn("TOPSECRET", message)
 
     def test_api_response(self):
         entries,total=module.api_items({"response":{"header":{"resultCode":"00"},
