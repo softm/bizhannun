@@ -55,15 +55,22 @@ export function createRegistrationCatalog({baseUrl=new URL('../data/business-num
     if(!route||typeof route!=='object'||Array.isArray(route))throw new Error('사업자번호 검색색인 형식 오류');
     manifest=m;routing=route;return m;
   }
-  async function search(query,{signal,limit=30}={}){
-    const m=await load({signal});
+  async function search(query,{signal,limit=30,force=false}={}){
+    const m=await load({signal,force});
     if(!m)return {status:'not_collected',items:[],total:0,complete:false,manifest:null};
     const term=termOf(query);
     if(!term)return {status:'invalid',items:[],total:0,complete:true,manifest:m};
-    const indexes=routing[term.length>1?term.slice(0,2):term];
-    if(!indexes)return {status:'ready',items:[],total:0,complete:true,manifest:m,coverageComplete:Boolean(m.complete)};
-    if(!Array.isArray(indexes)||indexes.some(i=>!Number.isSafeInteger(i)||i<0||i>=m.shards.length))
+    // Intersect *all* consecutive name bigrams. API pages are chronological,
+    // so using only the first two characters misses most precise name matches
+    // once there are more than the bounded number of matching shards.
+    const grams=term.length===1?[term]:[...new Set(Array.from({length:term.length-1},(_,i)=>term.slice(i,i+2)))];
+    const postingLists=grams.map(g=>routing[g]);
+    if(postingLists.some(list=>!Array.isArray(list)))return {status:'ready',items:[],total:0,complete:true,manifest:m,coverageComplete:Boolean(m.complete)};
+    const postings=postingLists.map(list=>new Set(list));
+    if(postings.some(set=>[...set].some(i=>!Number.isSafeInteger(i)||i<0||i>=m.shards.length)))
       throw new Error('사업자번호 검색 인덱스 오류');
+    const [smallest,...rest]=postings.sort((a,b)=>a.size-b.size);
+    const indexes=[...smallest].filter(i=>rest.every(set=>set.has(i))).sort((a,b)=>a-b);
     const found=new Map();let checked=0;
     for(const i of indexes.slice(0,MAX_SHARDS)){
       if(signal?.aborted)throw Object.assign(new Error('취소'),{name:'AbortError'});
