@@ -92,7 +92,7 @@ jobs:
       - name: Collect public registration numbers into searchable JSON
         env:
           FTC_SERVICE_KEY: ${{ secrets.FTC_SERVICE_KEY }}
-          FTC_PAGES_PER_RUN: '12'
+          FTC_PAGES_PER_RUN: '120'
         run: node scripts/collect-business-number-pages.mjs
 
       - name: Refresh public support program data
