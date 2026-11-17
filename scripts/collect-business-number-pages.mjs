@@ -18,7 +18,7 @@ const SOURCE='https://www.data.go.kr/data/15126311/openapi.do';
 const ENDPOINT='https://apis.data.go.kr/1130000/MllBs_2Service/getMllBsInfo_2';
 const PAGE_SIZE=1000;
 const MAX_RECORDS=4_000_000;
-const MAX_PAGES_RUN=Math.max(1,Math.min(30,Number(process.env.FTC_PAGES_PER_RUN)||12));
+const MAX_PAGES_RUN=Math.max(1,Math.min(150,Number(process.env.FTC_PAGES_PER_RUN)||12));
 const text=v=>String(v??'').replace(/[\u0000-\u001f\u007f]/g,' ').trim();
 const now=()=>new Date().toISOString();
 const hash=buf=>createHash('sha256').update(buf).digest('hex');
@@ -89,7 +89,7 @@ async function buildBatch({root=FOLDER,fetchImpl=fetch,key,pageLimit=MAX_PAGES_R
   await mkdir(join(stage,'shards'),{recursive:true});
   const shards=previousShards.map(s=>({...s}));
   const routing={...previousRouting};
-  let total=previous?.sourceTotal??null;
+  let total=null, sourceCountChanged=false;
   let attempted=0,invalidRows=0,duplicates=0,lastError='';
   const seen=new Set();
   // Previous snapshots are immutable; deduplicate any overlap on rerun
@@ -105,7 +105,11 @@ async function buildBatch({root=FOLDER,fetchImpl=fetch,key,pageLimit=MAX_PAGES_R
     if(total===null)total=result.total;
     // Page offsets can shift when new registrations arrive. Explicitly record
     // snapshot scope; never claim the source is fully exhausted when it drifts.
-    if(total!==result.total){lastError='수집 도중 원천 전체 건수가 변경됨';break;}
+    if(total!==result.total){
+      if(Math.abs(total-result.total)>Math.max(1000,total*0.01)){lastError='원천 건수가 비정상적으로 급변함';break;}
+      sourceCountChanged=true;
+      total=result.total;
+    }
     if(!result.rows.length && (page-1)*PAGE_SIZE<total){lastError='비어 있는 원천 페이지';break;}
     const accepted=[];
     for(const item of result.rows){
@@ -141,11 +145,11 @@ async function buildBatch({root=FOLDER,fetchImpl=fetch,key,pageLimit=MAX_PAGES_R
   const routeZip=encode(routing);
   await writeFile(join(stage,'routing.json.gz'),routeZip);
   const manifest={schemaVersion:1,generatedAt,recordCount:existingCount+shards.slice(previousShards.length).reduce((n,s)=>n+s.rows,0),
-    sourceTotal:total,complete,nextPageNo:complete?1:page,pagesFetched:page-1,
+    sourceTotal:total,sourceCountChanged:sourceCountChanged||Boolean(previous?.sourceCountChanged),complete,nextPageNo:complete?1:page,pagesFetched:page-1,
     invalidRows:(previous?.invalidRows||0)+invalidRows,duplicates:(previous?.duplicates||0)+duplicates,
     shards,routing:fileDescriptor('routing.json.gz',routeZip),
     source:{name:'공정거래위원회 통신판매사업자 등록현황',url:SOURCE},
-    coverage:complete?'공정위 통신판매업 원천 전체 페이지를 읽은 스냅샷. 전국 모든 사업자 아님.':'공정위 통신판매업 원천 중 수집 완료 페이지까지의 일부 공개자료',
+    coverage:complete?'공정위 통신판매업 원천 페이지 순회 완료. 갱신 중 데이터의 누락 가능성은 별도 점검 필요. 전국 모든 사업자 아님.':'공정위 통신판매업 원천 중 수집 완료 페이지까지의 일부 공개자료',
     lastError};
   await atomicJSON(join(stage,'manifest.json'),manifest);
   // Keep all old files, but only write new/updated files atomically.
