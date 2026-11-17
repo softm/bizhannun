@@ -479,7 +479,7 @@ function lookupView() {
     ${ui.nameQuery?`<div id="lookup-name-results-area" class="lookup-results ${showResults?'is-expanded':''}" ${showResults?'':'hidden'}>${showResults?nameSearchView():''}</div>`:''}
     ${ui.lookupBusy&&!ui.lookup?`<div class="lookup-progress" role="status"><span class="spinner"></span><div><strong>${esc(formatBusinessNumber(ui.lookupPendingNumber))}</strong><p>입력한 번호의 국세청 등록 상태를 확인하고 있습니다.</p></div></div>`:''}
     ${saved&&ui.lookup?.businessNumber===saved.businessNumber?`<section class="lookup-save-confirmation" role="status"><div><strong>거래처에 저장했습니다</strong><p>${activeUid?'로그인한 계정':'이 브라우저'}에 확인 기록을 보관했습니다. 다음 조회부터 이전 기록과 변화를 비교할 수 있습니다.</p></div><button type="button" class="button small" data-action="detail" data-id="${esc(saved.id)}">저장한 거래처 보기</button></section>`:''}
-    ${storeSearch.selected?renderStoreCatalogDetail({entry:storeSearch.selected,manifest:storeManifest}):ui.lookup?lookupResultView():''}
+    ${storeSearch.selected?renderStoreCatalogDetail({entry:storeSearch.selected,manifest:storeManifest,registrationRecords:registrationSearch.result?.items||[]}):ui.lookup?lookupResultView():''}
     ${!hasActivity?lookupStartView():''}
   </div>`;
 }
@@ -514,7 +514,7 @@ function nameSearchView() {
   const {index,result}=currentNameSearch();
   const known=result.total||ui.nameSearchBusy||ui.nameSearchError?renderBusinessSearch({query:ui.nameQuery,index,result,loading:ui.nameSearchBusy,error:ui.nameSearchError,
     meta:publicMeta,selectedNumber:ui.lookupSelection?.businessNumber||''}):'';
-  return `${known}<div id="registration-search-area">${renderRegistrationCatalog({query:ui.nameQuery,state:registrationSearch})}</div><div id="store-search-area">${renderStoreCatalogSearch({...storeSearch,manifest:storeManifest,selectedId:storeSearch.selected?.id})}</div>`;
+  return `${known}<div id="registration-search-area">${renderRegistrationCatalog({query:ui.nameQuery,state:registrationSearch})}</div><div id="store-search-area">${renderStoreCatalogSearch({...storeSearch,manifest:storeManifest,selectedId:storeSearch.selected?.id,registrationRecords:registrationSearch.result?.items||[]})}</div>`;
 }
 function resetStoreSearch() {
   registrationSerial++;registrationAbort?.abort();registrationAbort=null;
@@ -544,7 +544,7 @@ function renderStoreProgress() {
   const active=document.activeElement;
   if(area && !(area.contains(active)&&active.matches('select,input,button,a,summary'))){
     const focusId=area.contains(active)?active.id:'';
-    area.innerHTML=renderStoreCatalogSearch({...storeSearch,manifest:storeManifest});
+    area.innerHTML=renderStoreCatalogSearch({...storeSearch,manifest:storeManifest,registrationRecords:registrationSearch.result?.items||[]});
     if(focusId)document.getElementById(focusId)?.focus({preventScroll:true});
   }
 }
