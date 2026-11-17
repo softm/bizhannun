@@ -1,8 +1,8 @@
 {
   "provider": "ftc",
-  "lastAttemptAt": "2026-11-16T14:19:44Z",
+  "lastAttemptAt": "2026-11-17T02:06:11Z",
   "lastSuccessAt": null,
-  "status": "not_configured",
+  "status": "failed",
   "source": "https://www.data.go.kr/data/15126311/openapi.do",
-  "message": "FTC_SERVICE_KEY 미설정: 이전 공개 데이터 유지"
+  "message": "HTTP Error 403: Forbidden"
 }
