@@ -5,6 +5,7 @@ const count = v=>new Intl.NumberFormat('ko-KR').format(v||0);
 const MAX_SHARDS=60, MAX_BYTES=5_000_000, MAX_ROUTING_BYTES=32_000_000;
 const pathOK=p=>typeof p==='string' && /^(?:shards\/\d{5}|routing)\.json\.gz$/.test(p);
 const termOf=q=>normalizeBusinessName(String(q||'').replace(/[%*]/g,'').trim());
+const normalizedAddress=v=>String(v||'').normalize('NFKC').toLocaleLowerCase('ko').replace(/[\s,().\-]/gu,'').trim();
 async function readBytes(url,fetchImpl,signal,max=MAX_BYTES){
   const r=await fetchImpl(url,{cache:'no-cache',credentials:'same-origin',signal,redirect:'error'});
   if(!r.ok)throw new Error('공개 사업자번호 자료를 불러오지 못했습니다. (HTTP '+r.status+')');
@@ -55,7 +56,7 @@ export function createRegistrationCatalog({baseUrl=new URL('../data/business-num
     if(!route||typeof route!=='object'||Array.isArray(route))throw new Error('사업자번호 검색색인 형식 오류');
     manifest=m;routing=route;return m;
   }
-  async function search(query,{signal,limit=30,force=false}={}){
+  async function search(query,{signal,limit=30,force=false,preferAddress=''}={}){
     const m=await load({signal,force});
     if(!m)return {status:'not_collected',items:[],total:0,complete:false,manifest:null};
     const term=termOf(query);
@@ -83,7 +84,15 @@ export function createRegistrationCatalog({baseUrl=new URL('../data/business-num
         found.set([item.businessNumber,item.name,item.address].join('|'),item);
       }
     }
-    const all=[...found.values()].sort((a,b)=>Number(normalizeBusinessName(b.name)===term)-Number(normalizeBusinessName(a.name)===term)||a.name.localeCompare(b.name,'ko'));
+    const addressKey=normalizedAddress(preferAddress);
+    const all=[...found.values()].sort((a,b)=>{
+      if(addressKey){
+        const score=v=>Number(normalizeBusinessName(v.name)===term && normalizedAddress(v.address)===addressKey);
+        const difference=score(b)-score(a);
+        if(difference)return difference;
+      }
+      return Number(normalizeBusinessName(b.name)===term)-Number(normalizeBusinessName(a.name)===term)||a.name.localeCompare(b.name,'ko');
+    });
     return {status:'ready',items:all.slice(0,limit),total:all.length,complete:checked===indexes.length,coverageComplete:Boolean(m.complete),manifest:m};
   }
   return {load,search};
