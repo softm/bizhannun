@@ -95,6 +95,10 @@ jobs:
           FTC_PAGES_PER_RUN: '120'
         run: node scripts/collect-business-number-pages.mjs
 
+      - name: Validate official business registration JSON before publishing
+        if: hashFiles('data/business-numbers/manifest.json') != ''
+        run: node scripts/validate-registration-catalog.mjs
+
       - name: Refresh public support program data
         # Expected upstream failures are recorded by the collector while the
         # last successful snapshot stays intact. A broken collector still fails.
