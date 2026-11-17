@@ -1,8 +1,8 @@
 {
   "provider": "ftc",
-  "lastAttemptAt": "2026-11-17T02:08:47Z",
+  "lastAttemptAt": "2026-11-17T02:26:18Z",
   "lastSuccessAt": null,
   "status": "failed",
   "source": "https://www.data.go.kr/data/15126311/openapi.do",
-  "message": "공정위 등록현황 API(15126311) HTTP 403: SERVICE_KEY_IS_NOT_REGISTERED_ERROR — 해당 API 활용신청·승인, 서비스키 권한 및 호출 IP 제한을 확인하세요."
+  "message": "<urlopen error timed out>"
 }
