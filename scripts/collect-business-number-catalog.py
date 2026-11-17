@@ -22,6 +22,7 @@ import time
 import unicodedata
 import urllib.parse
 import urllib.request
+import urllib.error
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "data/business-numbers"
@@ -132,6 +133,22 @@ def api_items(body):
     return items, total
 
 
+def describe_http_error(error):
+    # Never print the URL or response body: they could contain the service key.
+    body = error.read(4096).decode("utf-8", errors="replace").upper()
+    codes = ("SERVICE_ACCESS_DENIED_ERROR", "PERMISSION_DENIED",
+             "SERVICE_KEY_IS_NOT_REGISTERED_ERROR", "SERVICE_KEY_IS_NULL",
+             "BLACKLIST_IP_ACCESS_ERROR", "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR")
+    reason = next((code for code in codes if code in body), "")
+    if error.code in (401, 403):
+        return ("공정위 등록현황 API(15126311) HTTP " + str(error.code)
+                + (": " + reason if reason else "")
+                + " — 해당 API 활용신청·승인, 서비스키 권한 및 호출 IP 제한을 확인하세요.")
+    if error.code == 429:
+        return "공정위 API 호출한도 초과(HTTP 429). 재호출 시도를 중단합니다."
+    return "공정위 등록현황 API HTTP " + str(error.code)
+
+
 def collect_api(key):
     key = urllib.parse.unquote(key).strip()
     if not key:
@@ -148,8 +165,11 @@ def collect_api(key):
             "Accept": "application/json",
         })
         # Slow, sequential calls avoid rate spikes.
-        with urllib.request.urlopen(request, timeout=35) as response:
-            payload = response.read(MAX_RESPONSE_BYTES + 1)
+        try:
+            with urllib.request.urlopen(request, timeout=35) as response:
+                payload = response.read(MAX_RESPONSE_BYTES + 1)
+        except urllib.error.HTTPError as error:
+            raise ValueError(describe_http_error(error)) from None
         if len(payload) > MAX_RESPONSE_BYTES:
             raise ValueError("공정위 API 응답 용량 초과")
         items, total = api_items(json.loads(payload))
