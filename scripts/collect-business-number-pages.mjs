@@ -169,7 +169,10 @@ export async function collectRegistration({key=process.env.FTC_SERVICE_KEY||'',r
   if(!supplied){status.status='not_configured';status.message='FTC_SERVICE_KEY 미설정';await atomicJSON(statusPath,status);return status;}
   try{
     const result=await buildBatch({root,key:supplied,fetchImpl,pageLimit});
-    status.status=result.unchanged?'unchanged':result.manifest.complete?'success':'partial';
+    // When a completed snapshot is still fresh there is no API call.
+    // Preserve the last factual attempt timestamp and avoid a needless commit.
+    if(result.unchanged) return {...previous,unchanged:true};
+    status.status=result.manifest.complete?'success':'partial';
     status.lastSuccessAt=result.unchanged?previous.lastSuccessAt:result.manifest.generatedAt;
     status.recordCount=result.manifest.recordCount;status.sourceTotal=result.manifest.sourceTotal;
     status.nextPageNo=result.manifest.nextPageNo;status.complete=result.manifest.complete;
