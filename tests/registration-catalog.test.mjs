@@ -11,7 +11,7 @@ const pack=obj=>gzipSync(Buffer.from(JSON.stringify(obj)));
 
 test('공개자료만 검색하고 전체 사업자 명부로 오인하지 않는다',async()=>{
   const shard=pack([['2208162517','다온상사','서울','정상'],['6901100416','서해박속낙지전문점','광명','정상']]);
-  const routing=pack({'다':[0],'다온':[0],'낙지':[0],'서':[0]});
+  const routing=pack({'다':[0],'다온':[0],'온상':[0],'상사':[0],'낙지':[0],'서':[0]});
   const manifest={schemaVersion:1,recordCount:2,
     source:{name:'공정위',url:'https://www.data.go.kr/data/15126311/openapi.do'},
     shards:[{...descriptor('shards/00000.json.gz',shard),rows:2}],
@@ -24,6 +24,7 @@ test('공개자료만 검색하고 전체 사업자 명부로 오인하지 않�
   };
   const client=createRegistrationCatalog({baseUrl:base,fetchImpl});
   assert.equal((await client.search('다온')).items[0].businessNumber,'2208162517');
+  assert.equal((await client.search('다온상사')).total,1);
   assert.equal((await client.search('낙지')).total,1);
   assert.equal((await client.search('기록없음')).total,0);
   const html=renderRegistrationCatalog({query:'다온',state:{result:await client.search('다온')}});
