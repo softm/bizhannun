@@ -103,6 +103,7 @@ const storeClient = createStoreCatalogClient();
 const registrationClient = createRegistrationCatalog();
 let registrationSerial = 0, registrationAbort = null;
 let registrationSearch = { query:'',result:null,loading:false,error:'' };
+let storeRegistrationSerial=0,storeRegistrationAbort=null,storeRegistrationResults=[],storeRegistrationLoading=false;
 let registrationMeta = null, registrationStatus = {}, registrationMetaError = '', registrationMetaLoading = false;
 let registrationMetaPromise = null;
 let storeManifest = null, storeStatus = {}, storeMetadataError = '', storeMetadataLoading = false;
@@ -479,7 +480,7 @@ function lookupView() {
     ${ui.nameQuery?`<div id="lookup-name-results-area" class="lookup-results ${showResults?'is-expanded':''}" ${showResults?'':'hidden'}>${showResults?nameSearchView():''}</div>`:''}
     ${ui.lookupBusy&&!ui.lookup?`<div class="lookup-progress" role="status"><span class="spinner"></span><div><strong>${esc(formatBusinessNumber(ui.lookupPendingNumber))}</strong><p>입력한 번호의 국세청 등록 상태를 확인하고 있습니다.</p></div></div>`:''}
     ${saved&&ui.lookup?.businessNumber===saved.businessNumber?`<section class="lookup-save-confirmation" role="status"><div><strong>거래처에 저장했습니다</strong><p>${activeUid?'로그인한 계정':'이 브라우저'}에 확인 기록을 보관했습니다. 다음 조회부터 이전 기록과 변화를 비교할 수 있습니다.</p></div><button type="button" class="button small" data-action="detail" data-id="${esc(saved.id)}">저장한 거래처 보기</button></section>`:''}
-    ${storeSearch.selected?renderStoreCatalogDetail({entry:storeSearch.selected,manifest:storeManifest,registrationRecords:registrationSearch.result?.items||[]}):ui.lookup?lookupResultView():''}
+    ${storeSearch.selected?renderStoreCatalogDetail({entry:storeSearch.selected,manifest:storeManifest,registrationRecords:[...(registrationSearch.result?.items||[]),...storeRegistrationResults],registrationLoading:storeRegistrationLoading}):ui.lookup?lookupResultView():''}
     ${!hasActivity?lookupStartView():''}
   </div>`;
 }
@@ -516,7 +517,39 @@ function nameSearchView() {
     meta:publicMeta,selectedNumber:ui.lookupSelection?.businessNumber||''}):'';
   return `${known}<div id="registration-search-area">${renderRegistrationCatalog({query:ui.nameQuery,state:registrationSearch})}</div><div id="store-search-area">${renderStoreCatalogSearch({...storeSearch,manifest:storeManifest,selectedId:storeSearch.selected?.id,registrationRecords:registrationSearch.result?.items||[]})}</div>`;
 }
+function stopStoreRegistrationLookup() {
+  storeRegistrationSerial++;
+  storeRegistrationAbort?.abort();
+  storeRegistrationAbort=null;
+  storeRegistrationResults=[];
+  storeRegistrationLoading=false;
+}
+function startStoreRegistrationLookup(entry) {
+  stopStoreRegistrationLookup();
+  const serial=storeRegistrationSerial;
+  const controller=new AbortController();
+  storeRegistrationAbort=controller;
+  storeRegistrationLoading=true;
+  render();
+  (async()=>{
+    try {
+      const result=await registrationClient.search(entry.name,{
+        signal:controller.signal,limit:100,preferAddress:entry.roadAddress||entry.address||''
+      });
+      if(serial!==storeRegistrationSerial||storeSearch.selected?.id!==entry.id)return;
+      storeRegistrationResults=result.items||[];
+    } catch(error) {
+      if(controller.signal.aborted||serial!==storeRegistrationSerial)return;
+      storeRegistrationResults=[];
+    } finally {
+      if(serial===storeRegistrationSerial&&storeSearch.selected?.id===entry.id){
+        storeRegistrationLoading=false;storeRegistrationAbort=null;render();
+      }
+    }
+  })();
+}
 function resetStoreSearch() {
+  stopStoreRegistrationLookup();
   registrationSerial++;registrationAbort?.abort();registrationAbort=null;
   registrationSearch={query:'',result:null,loading:false,error:''};
   storeSerial++;storeClient.cancel();
@@ -549,6 +582,7 @@ function renderStoreProgress() {
   }
 }
 async function searchStoreCatalog(query,{regionCode=storeSearch.regionCode,refresh=false}={}) {
+  stopStoreRegistrationLookup();
   const serial=++storeSerial;
   storeClient.cancel();
   storeSearch={query,result:null,loading:true,error:'',regionCode,selected:null,page:1};render();
@@ -1503,13 +1537,13 @@ document.addEventListener('click',async event=>{
     target?.focus({preventScroll:true});target?.scrollIntoView({block:'nearest',behavior:'instant'});return;
   }
   if(action==='select-registration-result'){
-    const entry=registrationSearch.result?.items?.find(item=>item.businessNumber===element.dataset.number);
+    const entry=[...(registrationSearch.result?.items||[]),...storeRegistrationResults].find(item=>item.businessNumber===element.dataset.number);
     if(entry){await lookup(entry.businessNumber,{candidate:entry});}
     return;
   }
   if(action==='select-store-result'){
     const entry=storeSearch.result?.results.find(item=>item.id===element.dataset.id);
-    if(entry){lookupSerial++;interactionEpoch++;clearLookupResult();storeSearch.selected=entry;render();const title=document.getElementById('store-detail-title');title?.focus({preventScroll:true});title?.scrollIntoView({block:'start',behavior:'instant'});}
+    if(entry){lookupSerial++;interactionEpoch++;clearLookupResult();storeSearch.selected=entry;startStoreRegistrationLookup(entry);const title=document.getElementById('store-detail-title');title?.focus({preventScroll:true});title?.scrollIntoView({block:'start',behavior:'instant'});}
     return;
   }
   if(action==='lookup-brand-company'){
@@ -1520,7 +1554,7 @@ document.addEventListener('click',async event=>{
     await submitLookup(brand.businessNumber,{type:'number'});
     return;
   }
-  if(action==='return-store-results'){interactionEpoch++;storeSearch.selected=null;render();document.getElementById('store-results-title')?.focus({preventScroll:true});return;}
+  if(action==='return-store-results'){interactionEpoch++;stopStoreRegistrationLookup();storeSearch.selected=null;render();document.getElementById('store-results-title')?.focus({preventScroll:true});return;}
   if(action==='retry-store-search'){if(ui.nameQuery)await searchStoreCatalog(ui.nameQuery,{refresh:true});return;}
   if(action==='store-search-prev'||action==='store-search-next'){
     interactionEpoch++;storeSearch.page=Math.max(1,storeSearch.page+(action==='store-search-next'?1:-1));render();document.getElementById('store-results-title')?.focus({preventScroll:true});return;
