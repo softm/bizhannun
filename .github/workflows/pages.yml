@@ -92,7 +92,8 @@ jobs:
       - name: Collect public registration numbers into searchable JSON
         env:
           FTC_SERVICE_KEY: ${{ secrets.FTC_SERVICE_KEY }}
-        run: python3 scripts/collect-business-number-catalog.py
+          FTC_PAGES_PER_RUN: '12'
+        run: node scripts/collect-business-number-pages.mjs
 
       - name: Refresh public support program data
         # Expected upstream failures are recorded by the collector while the
