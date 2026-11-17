@@ -1,8 +1,12 @@
 {
   "provider": "ftc",
-  "lastAttemptAt": "2026-11-17T03:55:58Z",
-  "lastSuccessAt": null,
-  "status": "failed",
+  "lastAttemptAt": "2026-11-17T04:45:49.307Z",
+  "lastSuccessAt": "2026-11-17T04:46:03.818Z",
+  "status": "partial",
   "source": "https://www.data.go.kr/data/15126311/openapi.do",
-  "message": "<urlopen error _ssl.c:1063: The handshake operation timed out>"
+  "message": "",
+  "recordCount": 11986,
+  "sourceTotal": 2782332,
+  "nextPageNo": 13,
+  "complete": false
 }

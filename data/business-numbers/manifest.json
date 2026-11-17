@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-17T04:46:03.818Z",
+  "recordCount": 11986,
+  "sourceTotal": 2782332,
+  "complete": false,
+  "nextPageNo": 13,
+  "pagesFetched": 12,
+  "invalidRows": 0,
+  "duplicates": 14,
+  "shards": [
+    {
+      "path": "shards/00000.json.gz",
+      "bytes": 22496,
+      "sha256": "4cabe8f3c856d0600899d5a3ea6fcb1a426d000d41868009a5150451d2d0cb04",
+      "rows": 998
+    },
+    {
+      "path": "shards/00001.json.gz",
+      "bytes": 21079,
+      "sha256": "7cf361a2409049e5e45570032cd5da6c99c2f6795775b5425c792a09b7b2aa1b",
+      "rows": 1000
+    },
+    {
+      "path": "shards/00002.json.gz",
+      "bytes": 23250,
+      "sha256": "cdf10d6494062538d847708e6c3a7ca71729d030122503bea6a8ce581b294eed",
+      "rows": 1000
+    },
+    {
+      "path": "shards/00003.json.gz",
+      "bytes": 21834,
+      "sha256": "a6c8816af654f8d764246cbe298617567314bdc75162b6cd3bca82fe7a6ba4d1",
+      "rows": 1000
+    },
+    {
+      "path": "shards/00004.json.gz",
+      "bytes": 21974,
+      "sha256": "a36c2be073c50cfb9707ebdeae7ee9d46f86e1a123abd4f5a054b676641934e1",
+      "rows": 1000
+    },
+    {
+      "path": "shards/00005.json.gz",
+      "bytes": 21011,
+      "sha256": "9b9978fa4d23c1f49940c71b8b03535b0d2c680b3ee14744d87c8309f65e894d",
+      "rows": 1000
+    },
+    {
+      "path": "shards/00006.json.gz",
+      "bytes": 18982,
+      "sha256": "267f19e06e9209ae06e7bffc97971e2a056eb50485ab09ed510b7e0df3554c3e",
+      "rows": 1000
+    },
+    {
+      "path": "shards/00007.json.gz",
+      "bytes": 19122,
+      "sha256": "12fed0aa086313de2a420a82e974ae9df205beb2b8fb8f275194ef1adb40e271",
+      "rows": 1000
+    },
+    {
+      "path": "shards/00008.json.gz",
+      "bytes": 18688,
+      "sha256": "5f425a0c90468af7274056cf3a71f132bff055001fe7cff887fa8c0c3abb871b",
+      "rows": 994
+    },
+    {
+      "path": "shards/00009.json.gz",
+      "bytes": 17462,
+      "sha256": "dc74aa4c396c5bf17b64227210d6bba5a6abfc333733d91f13c40f2c370eafc1",
+      "rows": 999
+    },
+    {
+      "path": "shards/00010.json.gz",
+      "bytes": 17456,
+      "sha256": "f97a4c3b1c67d84deecc7894bc951d55469f58bd419b374f053eabac006d4bb5",
+      "rows": 998
+    },
+    {
+      "path": "shards/00011.json.gz",
+      "bytes": 20414,
+      "sha256": "51d795b5cba7bea41dba58c508ebbef33506c46c0f6127bde9a3e97a2a0b9525",
+      "rows": 997
+    }
+  ],
+  "routing": {
+    "path": "routing.json.gz",
+    "bytes": 87783,
+    "sha256": "b8575b1303255e6e3477a4f7c816da93e54ac0ca4767cfdaa6ebc562bbee2bb5"
+  },
+  "source": {
+    "name": "공정거래위원회 통신판매사업자 등록현황",
+    "url": "https://www.data.go.kr/data/15126311/openapi.do"
+  },
+  "coverage": "공정위 통신판매업 원천 중 수집 완료 페이지까지의 일부 공개자료",
+  "lastError": ""
+}
