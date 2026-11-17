@@ -588,7 +588,7 @@ async function searchRegistrationCatalog(query,{refresh=false}={}) {
   registrationSearch={query,result:null,loading:true,error:''};
   render();
   try {
-    const result=await registrationClient.search(query,{signal:controller.signal});
+    const result=await registrationClient.search(query,{signal:controller.signal,force:refresh});
     if(serial===registrationSerial)registrationSearch.result=result;
   } catch(error) {
     if(serial===registrationSerial&&!controller.signal.aborted)registrationSearch.error=error.message;
