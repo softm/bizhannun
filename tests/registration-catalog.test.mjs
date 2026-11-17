@@ -41,3 +41,24 @@ test('미게시·손상된 검색자료는 추측한 등록번호를 표시하�
   assert.doesNotMatch(html,/<script>/);
   assert.match(html,/&lt;script&gt;/);
 });
+
+test('상가 상세 재검색은 같은 이름 중 도로명주소 일치 등록번호를 우선한다',async()=>{
+  const shard=pack([
+    ['2208162517','다온상사','경기도 고양시 덕양구 중앙로 20','정상'],
+    ['6901100416','다온상사','서울특별시 중구 세종대로 1','정상']
+  ]);
+  const routing=pack({'다':[0],'다온':[0],'온상':[0],'상사':[0]});
+  const manifest={schemaVersion:1,recordCount:2,
+    source:{url:'https://www.data.go.kr/data/15126311/openapi.do'},
+    shards:[{...descriptor('shards/00000.json.gz',shard),rows:2}],
+    routing:descriptor('routing.json.gz',routing)};
+  const files=new Map([[base+'manifest.json',Buffer.from(JSON.stringify(manifest))],
+    [base+'routing.json.gz',routing],[base+'shards/00000.json.gz',shard]]);
+  const client=createRegistrationCatalog({baseUrl:base,fetchImpl:async url=>{
+    const file=files.get(String(url));
+    return new Response(file||'',{status:file?200:404});
+  }});
+  const result=await client.search('다온상사',{preferAddress:'서울특별시 중구 세종대로 1',limit:1});
+  assert.equal(result.total,2);
+  assert.equal(result.items[0].businessNumber,'6901100416');
+});
