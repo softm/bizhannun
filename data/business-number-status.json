@@ -1,12 +1,12 @@
 {
   "provider": "ftc",
-  "lastAttemptAt": "2026-11-22T19:28:36.256Z",
-  "lastSuccessAt": "2026-11-22T19:40:35.361Z",
+  "lastAttemptAt": "2026-11-23T01:45:45.608Z",
+  "lastSuccessAt": "2026-11-23T01:59:44.779Z",
   "status": "partial",
   "source": "https://www.data.go.kr/data/15126311/openapi.do",
   "message": "",
-  "recordCount": 2246713,
+  "recordCount": 2365766,
   "sourceTotal": 2774873,
-  "nextPageNo": 2293,
+  "nextPageNo": 2413,
   "complete": false
 }
