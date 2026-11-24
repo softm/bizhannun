@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-24T05:32:59.936Z",
-  "recordCount": 2716825,
+  "generatedAt": "2026-11-24T09:44:56.872Z",
+  "recordCount": 2720337,
   "sourceTotal": 2775670,
   "sourceCountChanged": true,
-  "complete": false,
-  "nextPageNo": 2773,
-  "pagesFetched": 2772,
+  "complete": true,
+  "nextPageNo": 1,
+  "pagesFetched": 2776,
   "invalidRows": 8,
-  "duplicates": 55167,
+  "duplicates": 55325,
   "shards": [
     {
       "path": "shards/00000.json.gz",
@@ -16641,17 +16641,41 @@
       "bytes": 14583,
       "sha256": "63c81582a8e2c37585724611dfb87cc1f114cb6783d354d9290375a6e6ffffee",
       "rows": 943
+    },
+    {
+      "path": "shards/02772.json.gz",
+      "bytes": 14897,
+      "sha256": "96884a357c0759441fb508af0d7565402879d0ab887bcdfcd73b6be931ffb47b",
+      "rows": 952
+    },
+    {
+      "path": "shards/02773.json.gz",
+      "bytes": 15621,
+      "sha256": "d02428fedb9c2c2fc1927c3d421ab74e1a9764ea0300b281e36c092f9ea5fc7a",
+      "rows": 975
+    },
+    {
+      "path": "shards/02774.json.gz",
+      "bytes": 14268,
+      "sha256": "0fa5bab014c49d5a7c7e8ea9bdac6b63a471052e051d9fc2632dc38392e843e2",
+      "rows": 950
+    },
+    {
+      "path": "shards/02775.json.gz",
+      "bytes": 11474,
+      "sha256": "7599c4cc09db6d8b300214eb4992e6ab495ddea4724e704de3983cc83bb35ece",
+      "rows": 635
     }
   ],
   "routing": {
     "path": "routing.json.gz",
-    "bytes": 13339517,
-    "sha256": "b21cfe3752c61057d189131033e4ad85002d95c107e86e003db00a0733eeac77"
+    "bytes": 13359760,
+    "sha256": "db21806c06c1d213e51b5cf831594b7a7beec08fcf9cca4ae277843f6632cfc5"
   },
   "source": {
     "name": "공정거래위원회 통신판매사업자 등록현황",
     "url": "https://www.data.go.kr/data/15126311/openapi.do"
   },
-  "coverage": "공정위 통신판매업 원천 중 수집 완료 페이지까지의 일부 공개자료",
+  "coverage": "공정위 통신판매업 원천 페이지 순회 완료. 갱신 중 데이터의 누락 가능성은 별도 점검 필요. 전국 모든 사업자 아님.",
   "lastError": ""
 }
